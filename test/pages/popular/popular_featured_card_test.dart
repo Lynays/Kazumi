@@ -32,6 +32,7 @@ void main() {
       final imgs = t.widgetList<NetworkImgLayer>(find.byType(NetworkImgLayer));
       expect(imgs.length, 2);
       expect(imgs.first.src, 'https://example.com/frieren.jpg');
+      expect(find.byType(ShaderMask), findsWidgets);
     });
 
     testWidgets('falls back when image, nameCn, score and summary miss', (

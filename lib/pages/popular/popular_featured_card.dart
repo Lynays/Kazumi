@@ -38,7 +38,7 @@ class PopularFeaturedCard extends StatelessWidget {
       button: true,
       label: '当前热门 TOP 1，$title',
       child: Material(
-        color: colors.surfaceContainerHighest,
+        type: MaterialType.transparency,
         borderRadius: StyleString.mdRadius,
         clipBehavior: Clip.antiAlias,
         child: LayoutBuilder(
@@ -65,23 +65,33 @@ class PopularFeaturedCard extends StatelessWidget {
             return Stack(
               fit: StackFit.expand,
               children: [
-                NetworkImgLayer(
-                  src: cover,
-                  width: w,
-                  height: h,
-                  borderRadius: BorderRadius.zero,
-                ),
-                const DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.bottomLeft,
-                      end: Alignment.topRight,
-                      colors: [
-                        Color(0xE6000000),
-                        Color(0x9E000000),
-                        Color(0x33000000),
+                RepaintBoundary(
+                  child: _softEdgeMask(
+                    0.04,
+                    Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        NetworkImgLayer(
+                          src: cover,
+                          width: w,
+                          height: h,
+                          borderRadius: BorderRadius.zero,
+                        ),
+                        const DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.bottomLeft,
+                              end: Alignment.topRight,
+                              colors: [
+                                Color(0xE6000000),
+                                Color(0x9E000000),
+                                Color(0x33000000),
+                              ],
+                              stops: [0.0, 0.56, 1.0],
+                            ),
+                          ),
+                        ),
                       ],
-                      stops: [0.0, 0.56, 1.0],
                     ),
                   ),
                 ),
@@ -157,18 +167,15 @@ class PopularFeaturedCard extends StatelessWidget {
                       ),
                       if (w >= 440 && h >= 160 && cover.isNotEmpty) ...[
                         const SizedBox(width: 16),
-                        DecoratedBox(
-                          decoration: BoxDecoration(
-                            borderRadius: StyleString.mdRadius,
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.24),
+                        RepaintBoundary(
+                          child: _softEdgeMask(
+                            0.08,
+                            NetworkImgLayer(
+                              src: cover,
+                              width: posterW,
+                              height: posterH,
+                              borderRadius: StyleString.mdRadius,
                             ),
-                          ),
-                          child: NetworkImgLayer(
-                            src: cover,
-                            width: posterW,
-                            height: posterH,
-                            borderRadius: StyleString.mdRadius,
                           ),
                         ),
                       ],
@@ -222,4 +229,23 @@ class PopularFeaturedCard extends StatelessWidget {
             ),
     );
   }
+}
+
+Widget _softEdgeMask(double edge, Widget child) {
+  Widget fade(bool vertical, Widget inner) => ShaderMask(
+    blendMode: BlendMode.dstIn,
+    shaderCallback: (r) => LinearGradient(
+      begin: vertical ? Alignment.topCenter : Alignment.centerLeft,
+      end: vertical ? Alignment.bottomCenter : Alignment.centerRight,
+      colors: const [
+        Colors.transparent,
+        Colors.white,
+        Colors.white,
+        Colors.transparent,
+      ],
+      stops: [0.0, edge, 1.0 - edge, 1.0],
+    ).createShader(r),
+    child: inner,
+  );
+  return fade(false, fade(true, child));
 }
