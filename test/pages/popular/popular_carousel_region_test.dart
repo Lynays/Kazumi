@@ -111,6 +111,69 @@ void main() {
       await t.pump(const Duration(seconds: 2));
       expect(t.takeException(), isNull);
     });
+
+    testWidgets('cancels pending row reset on hover and reduce-motion', (
+      t,
+    ) async {
+      final rows = List.generate(
+        3,
+        (r) => List.generate(16, (i) => _item(r * 20 + i + 11)),
+      );
+      await _pumpRegion(t, rows, size: const Size(480, 560));
+      await t.pump();
+
+      final lists = find.byType(ListView);
+      final c0 = t.widget<ListView>(lists.at(0)).controller!;
+      final max0 = c0.position.maxScrollExtent;
+      double row0Opacity() => t
+          .widget<AnimatedOpacity>(
+            find
+                .ancestor(
+                  of: find.byType(PopularCarouselStrip).first,
+                  matching: find.byType(AnimatedOpacity),
+                )
+                .first,
+          )
+          .opacity;
+
+      c0.jumpTo(max0 - 1.0);
+      await t.pump(const Duration(milliseconds: 40));
+      await t.pump(const Duration(milliseconds: 40));
+      await t.pump();
+      expect(row0Opacity(), 0.0);
+
+      final gesture = await t.createGesture(kind: PointerDeviceKind.mouse);
+      addTearDown(gesture.removePointer);
+      await gesture.addPointer(location: const Offset(1, 1));
+      await t.pump();
+      await gesture.moveTo(
+        t.getCenter(find.byType(PopularCarouselStrip).first),
+      );
+      await t.pump();
+      expect(row0Opacity(), 1.0);
+
+      await t.pump(const Duration(milliseconds: 250));
+      expect(c0.offset, greaterThan(max0 - 5.0));
+
+      await gesture.moveTo(const Offset(1, 1));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 40));
+      await t.pump(const Duration(milliseconds: 40));
+      await t.pump();
+      expect(row0Opacity(), 0.0);
+
+      await _pumpRegion(
+        t,
+        rows,
+        size: const Size(480, 560),
+        disableAnimations: true,
+      );
+      expect(row0Opacity(), 1.0);
+
+      await t.pump(const Duration(milliseconds: 250));
+      expect(c0.offset, greaterThan(max0 - 5.0));
+      expect(t.takeException(), isNull);
+    });
   });
 }
 

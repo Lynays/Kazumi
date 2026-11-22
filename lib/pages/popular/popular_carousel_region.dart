@@ -39,6 +39,8 @@ class _PopularCarouselRegionState extends State<PopularCarouselRegion>
   bool _reduceMotion = false;
   bool _disposed = false;
 
+  bool get _canAutoScroll => _appResumed && _tickerEnabled && !_reduceMotion;
+
   @override
   void initState() {
     super.initState();
@@ -61,7 +63,7 @@ class _PopularCarouselRegionState extends State<PopularCarouselRegion>
     super.didChangeDependencies();
     _tickerEnabled = TickerMode.valuesOf(context).enabled;
     _reduceMotion = MediaQuery.disableAnimationsOf(context);
-    _syncTicker();
+    _syncTicker(notify: false);
   }
 
   @override
@@ -100,15 +102,56 @@ class _PopularCarouselRegionState extends State<PopularCarouselRegion>
     }
   }
 
-  void _syncTicker() {
+  void _syncTicker({bool notify = true}) {
     if (_disposed) return;
-    final shouldRun = _appResumed && _tickerEnabled && !_reduceMotion;
+    final shouldRun = _canAutoScroll;
     if (shouldRun && !_ticker.isActive) {
       _lastTick = null;
       _ticker.start();
-    } else if (!shouldRun && _ticker.isActive) {
-      _ticker.stop();
-      _lastTick = null;
+    } else if (!shouldRun) {
+      if (_ticker.isActive) {
+        _ticker.stop();
+        _lastTick = null;
+      }
+      _cancelAllPendingResets(notify: notify);
+    }
+  }
+
+  void _onRowInteractionStart(int row) {
+    _interactingRows.add(row);
+    _cancelRowReset(row);
+  }
+
+  void _onRowInteractionEnd(int row) {
+    _interactingRows.remove(row);
+  }
+
+  void _cancelRowReset(int row, {bool notify = true}) {
+    _resetTimers[row]?.cancel();
+    _resetTimers[row] = null;
+    _resettingRows.remove(row);
+    if (_opacities[row] != 1.0) {
+      if (notify && mounted && !_disposed) {
+        setState(() => _opacities[row] = 1.0);
+      } else {
+        _opacities[row] = 1.0;
+      }
+    }
+  }
+
+  void _cancelAllPendingResets({bool notify = true}) {
+    var opacityChanged = false;
+    for (var i = 0; i < _rowCount; i++) {
+      _resetTimers[i]?.cancel();
+      _resetTimers[i] = null;
+      _resettingRows.remove(i);
+      if (_opacities[i] != 1.0) {
+        _opacities[i] = 1.0;
+        opacityChanged = true;
+      }
+    }
+    if (opacityChanged && notify && mounted && !_disposed) {
+      setState(() {});
     }
   }
 
@@ -135,11 +178,16 @@ class _PopularCarouselRegionState extends State<PopularCarouselRegion>
   }
 
   void _startRowReset(int row, ScrollController c) {
+    if (!_canAutoScroll || _interactingRows.contains(row)) return;
     _resetTimers[row]?.cancel();
     _resettingRows.add(row);
     if (mounted && !_disposed) setState(() => _opacities[row] = 0.0);
     _resetTimers[row] = Timer(const Duration(milliseconds: 180), () {
       if (!mounted || _disposed) return;
+      if (!_canAutoScroll || _interactingRows.contains(row)) {
+        _cancelRowReset(row);
+        return;
+      }
       if (c.hasClients) c.jumpTo(0.0);
       setState(() => _opacities[row] = 1.0);
       _resetTimers[row] = Timer(const Duration(milliseconds: 180), () {
@@ -177,8 +225,8 @@ class _PopularCarouselRegionState extends State<PopularCarouselRegion>
                         : const <BangumiItem>[],
                     controller: _controllers[i],
                     height: netH * _weights[i],
-                    onUserInteractionStart: () => _interactingRows.add(i),
-                    onUserInteractionEnd: () => _interactingRows.remove(i),
+                    onUserInteractionStart: () => _onRowInteractionStart(i),
+                    onUserInteractionEnd: () => _onRowInteractionEnd(i),
                   ),
                 ),
               ],
