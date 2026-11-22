@@ -30,7 +30,7 @@ void main() {
       expect(find.text('查看详情'), findsOneWidget);
 
       final imgs = t.widgetList<NetworkImgLayer>(find.byType(NetworkImgLayer));
-      expect(imgs.length, 2);
+      expect(imgs.length, 1);
       expect(imgs.first.src, 'https://example.com/frieren.jpg');
       expect(find.byType(ShaderMask), findsWidgets);
     });
@@ -61,6 +61,17 @@ void main() {
 
       expect(find.text('TOP 1'), findsOneWidget);
       expect(find.text('查看详情'), findsOneWidget);
+      expect(t.takeException(), isNull);
+
+      await _pumpCard(t, item, size: const Size(320, 120));
+      expect(find.text('TOP 1'), findsOneWidget);
+      expect(find.text('8.4'), findsOneWidget);
+      expect(find.text('查看详情'), findsNothing);
+      expect(t.takeException(), isNull);
+
+      await _pumpCard(t, item, size: const Size(320, 96));
+      expect(find.text('TOP 1'), findsOneWidget);
+      expect(find.text('查看详情'), findsNothing);
       expect(t.takeException(), isNull);
     });
 

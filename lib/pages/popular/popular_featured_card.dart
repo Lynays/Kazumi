@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_modular/flutter_modular.dart';
 import 'package:kazumi/bean/card/network_img_layer.dart';
 import 'package:kazumi/modules/bangumi/bangumi_item.dart';
-import 'package:kazumi/utils/constants.dart';
 
 /// Netflix-style hero showcase card for the current popular TOP 1 anime.
 class PopularFeaturedCard extends StatelessWidget {
@@ -29,9 +28,15 @@ class PopularFeaturedCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final accent = isDark ? const Color(0xFFE4152A) : colors.primary;
+    final onAccent = isDark ? Colors.white : colors.onPrimary;
     final title = _title;
     final cover = _cover;
     final summary = item.summary.replaceAll(RegExp(r'\s+'), ' ').trim();
+    final rawTitle = item.name.trim();
+    final genres = item.tags.take(3).map((tag) => tag.name).join('  ·  ');
+    const cardRadius = BorderRadius.all(Radius.circular(14));
 
     return Semantics(
       container: true,
@@ -39,7 +44,7 @@ class PopularFeaturedCard extends StatelessWidget {
       label: '当前热门 TOP 1，$title',
       child: Material(
         type: MaterialType.transparency,
-        borderRadius: StyleString.mdRadius,
+        borderRadius: cardRadius,
         clipBehavior: Clip.antiAlias,
         child: LayoutBuilder(
           builder: (_, c) {
@@ -49,25 +54,36 @@ class PopularFeaturedCard extends StatelessWidget {
             final h = c.maxHeight.isFinite && c.maxHeight > 0
                 ? c.maxHeight
                 : 240.0;
-            final compact = h < 180;
-            final posterH = (h - 32).clamp(96.0, 220.0);
-            final posterW = posterH * 0.68;
+            final scaledTitleSize = MediaQuery.textScalerOf(context).scale(16);
+            final textHeight = scaledTitleSize > 16
+                ? h * 16 / scaledTitleSize
+                : h;
+            final compact = textHeight < 240;
+            final tight = textHeight < 144;
             final titleStyle =
                 (compact
                         ? theme.textTheme.titleMedium
-                        : theme.textTheme.headlineSmall)
+                        : theme.textTheme.headlineMedium)
                     ?.copyWith(
                       color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      height: 1.2,
+                      fontSize: compact
+                          ? null
+                          : (w >= 560 && textHeight >= 260 ? 36 : 30),
+                      fontWeight: FontWeight.w600,
+                      height: 1.1,
                     );
+            final titleText = Text(
+              title,
+              maxLines: compact ? 1 : 2,
+              overflow: TextOverflow.ellipsis,
+              style: titleStyle,
+            );
 
             return Stack(
               fit: StackFit.expand,
               children: [
                 RepaintBoundary(
-                  child: _softEdgeMask(
-                    0.04,
+                  child: _heroEdgeMask(
                     Stack(
                       fit: StackFit.expand,
                       children: [
@@ -75,19 +91,34 @@ class PopularFeaturedCard extends StatelessWidget {
                           src: cover,
                           width: w,
                           height: h,
-                          borderRadius: BorderRadius.zero,
+                          borderRadius: cardRadius,
                         ),
                         const DecoratedBox(
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
-                              begin: Alignment.bottomLeft,
-                              end: Alignment.topRight,
+                              begin: Alignment.centerLeft,
+                              end: Alignment.centerRight,
                               colors: [
-                                Color(0xE6000000),
-                                Color(0x9E000000),
-                                Color(0x33000000),
+                                Color(0xF008080C),
+                                Color(0xAE08080C),
+                                Color(0x0608080C),
+                                Color(0x34090B10),
                               ],
-                              stops: [0.0, 0.56, 1.0],
+                              stops: [0.0, 0.30, 0.59, 1.0],
+                            ),
+                          ),
+                        ),
+                        const DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.bottomCenter,
+                              end: Alignment.topCenter,
+                              colors: [
+                                Color(0x96090B10),
+                                Color(0x40090B10),
+                                Color(0x00090B10),
+                              ],
+                              stops: [0.0, 0.14, 0.34],
                             ),
                           ),
                         ),
@@ -95,93 +126,121 @@ class PopularFeaturedCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                Padding(
-                  padding: EdgeInsets.all(compact ? 12 : 18),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 4,
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              children: [
-                                _pill(
-                                  colors.primary,
-                                  colors.onPrimary,
-                                  'TOP 1',
-                                ),
-                                _pill(
-                                  const Color(0x3DFFFFFF),
-                                  Colors.white,
-                                  '当前热门',
-                                ),
-                                if (item.ratingScore > 0)
-                                  _pill(
-                                    const Color(0x4D000000),
-                                    Colors.white,
-                                    item.ratingScore.toStringAsFixed(1),
-                                    icon: Icons.star_rounded,
-                                  ),
-                              ],
-                            ),
-                            SizedBox(height: compact ? 6 : 10),
-                            Text(
-                              title,
-                              maxLines: compact ? 1 : 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: titleStyle,
-                            ),
-                            if (summary.isNotEmpty && h >= 150) ...[
-                              const SizedBox(height: 6),
-                              Flexible(
-                                child: Text(
-                                  summary,
-                                  maxLines: h >= 220 ? 3 : 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                    color: Colors.white.withValues(alpha: 0.86),
-                                    height: 1.35,
-                                  ),
-                                ),
-                              ),
-                            ],
-                            if (h >= 120) ...[
-                              SizedBox(height: compact ? 8 : 12),
+                if (textHeight < 96)
+                  Align(
+                    alignment: Alignment.bottomLeft,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: titleText,
+                    ),
+                  )
+                else
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      compact ? 12 : 30,
+                      tight ? 8 : 12,
+                      16,
+                      tight ? 8 : (compact ? 12 : 22),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
                               _pill(
-                                Colors.white.withValues(alpha: 0.92),
-                                Colors.black87,
-                                '查看详情',
-                                icon: Icons.play_arrow_rounded,
-                                r: 20,
-                                px: 12,
-                                py: 6,
+                                accent,
+                                onAccent,
+                                'TOP 1',
+                                icon: Icons.emoji_events_rounded,
+                                r: 12,
                               ),
+                              SizedBox(height: tight ? 4 : (compact ? 6 : 10)),
+                              titleText,
+                              if (rawTitle.isNotEmpty &&
+                                  rawTitle != title &&
+                                  textHeight >= 190) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  rawTitle,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    color: Colors.white.withValues(alpha: 0.88),
+                                    height: 1.12,
+                                  ),
+                                ),
+                              ],
+                              SizedBox(height: compact ? 3 : 6),
+                              Row(
+                                children: [
+                                  if (item.ratingScore > 0) ...[
+                                    _pill(
+                                      Colors.transparent,
+                                      Colors.white,
+                                      item.ratingScore.toStringAsFixed(1),
+                                      icon: Icons.star_rounded,
+                                      iconColor: const Color(0xFFF5B742),
+                                      px: 0,
+                                      py: 0,
+                                    ),
+                                    const SizedBox(width: 8),
+                                  ],
+                                  Flexible(
+                                    child: Text(
+                                      !compact && genres.isNotEmpty
+                                          ? genres
+                                          : '当前热门',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(
+                                            color: const Color(0xD9F6EDF1),
+                                          ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (summary.isNotEmpty && textHeight >= 180) ...[
+                                const SizedBox(height: 6),
+                                Flexible(
+                                  child: Text(
+                                    summary,
+                                    maxLines: textHeight >= 220 ? 3 : 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.86,
+                                      ),
+                                      height: 1.35,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              if (textHeight >= 128) ...[
+                                SizedBox(
+                                  height: tight ? 6 : (compact ? 8 : 12),
+                                ),
+                                _pill(
+                                  accent,
+                                  onAccent,
+                                  '查看详情',
+                                  icon: Icons.info_outline_rounded,
+                                  glowColor: accent,
+                                  r: 10,
+                                  px: compact ? 16 : 20,
+                                  py: tight ? 5 : (compact ? 7 : 10),
+                                ),
+                              ],
                             ],
-                          ],
-                        ),
-                      ),
-                      if (w >= 440 && h >= 160 && cover.isNotEmpty) ...[
-                        const SizedBox(width: 16),
-                        RepaintBoundary(
-                          child: _softEdgeMask(
-                            0.08,
-                            NetworkImgLayer(
-                              src: cover,
-                              width: posterW,
-                              height: posterH,
-                              borderRadius: StyleString.mdRadius,
-                            ),
                           ),
                         ),
+                        if (!compact && w >= 420) SizedBox(width: w * 0.48),
                       ],
-                    ],
+                    ),
                   ),
-                ),
                 Positioned.fill(
                   child: Material(
                     type: MaterialType.transparency,
@@ -203,49 +262,73 @@ class PopularFeaturedCard extends StatelessWidget {
     Color fg,
     String text, {
     IconData? icon,
+    Color? iconColor,
+    Color? glowColor,
     double r = 6,
     double px = 8,
     double py = 3,
   }) {
     final label = Text(
       text,
-      style: TextStyle(color: fg, fontSize: 12, fontWeight: FontWeight.w700),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(color: fg, fontSize: 12, fontWeight: FontWeight.w600),
     );
     return Container(
       padding: EdgeInsets.symmetric(horizontal: px, vertical: py),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(r),
+        boxShadow: glowColor == null
+            ? null
+            : [
+                BoxShadow(
+                  color: glowColor.withValues(alpha: 0.48),
+                  blurRadius: 18,
+                  offset: const Offset(0, 6),
+                ),
+              ],
       ),
       child: icon == null
           ? label
           : Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(icon, size: 15, color: fg),
+                Icon(icon, size: 15, color: iconColor ?? fg),
                 const SizedBox(width: 3),
-                label,
+                Flexible(child: label),
               ],
             ),
     );
   }
 }
 
-Widget _softEdgeMask(double edge, Widget child) {
-  Widget fade(bool vertical, Widget inner) => ShaderMask(
-    blendMode: BlendMode.dstIn,
-    shaderCallback: (r) => LinearGradient(
-      begin: vertical ? Alignment.topCenter : Alignment.centerLeft,
-      end: vertical ? Alignment.bottomCenter : Alignment.centerRight,
-      colors: const [
-        Colors.transparent,
-        Colors.white,
-        Colors.white,
-        Colors.transparent,
-      ],
-      stops: [0.0, edge, 1.0 - edge, 1.0],
-    ).createShader(r),
-    child: inner,
+Widget _heroEdgeMask(Widget child) {
+  Widget fade(Alignment a, Alignment b, List<double> stops, Widget inner) =>
+      ShaderMask(
+        blendMode: BlendMode.dstIn,
+        shaderCallback: (r) => LinearGradient(
+          begin: a,
+          end: b,
+          colors: const [
+            Colors.transparent,
+            Colors.white,
+            Colors.white,
+            Colors.transparent,
+          ],
+          stops: stops,
+        ).createShader(r),
+        child: inner,
+      );
+  return fade(
+    Alignment.centerLeft,
+    Alignment.centerRight,
+    const [0.0, 0.03, 0.96, 1.0],
+    fade(Alignment.topCenter, Alignment.bottomCenter, const [
+      0.0,
+      0.05,
+      0.89,
+      1.0,
+    ], child),
   );
-  return fade(false, fade(true, child));
 }
