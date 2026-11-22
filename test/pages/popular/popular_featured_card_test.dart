@@ -30,7 +30,7 @@ void main() {
       expect(find.text('查看详情'), findsOneWidget);
 
       final imgs = t.widgetList<NetworkImgLayer>(find.byType(NetworkImgLayer));
-      expect(imgs.length, 2);
+      expect(imgs.length, 1);
       expect(imgs.first.src, 'https://example.com/frieren.jpg');
       expect(find.byType(ShaderMask), findsWidgets);
     });

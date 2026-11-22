@@ -10,7 +10,7 @@ import 'package:kazumi/pages/popular/popular_carousel_strip.dart';
 
 void main() {
   group('PopularCarouselStrip', () {
-    testWidgets('renders 0/1/20 items without header and title below poster', (
+    testWidgets('renders 0/1/20 items without header and overlaid title', (
       t,
     ) async {
       final controller = ScrollController();
@@ -26,7 +26,8 @@ void main() {
           } else {
             final posterRect = t.getRect(find.byType(NetworkImgLayer).first);
             final titleRect = t.getRect(find.text('番剧 1'));
-            expect(titleRect.top, greaterThanOrEqualTo(posterRect.bottom - 1));
+            expect(titleRect.bottom, lessThanOrEqualTo(posterRect.bottom + 1));
+            expect(titleRect.top, greaterThanOrEqualTo(posterRect.top));
           }
           expect(t.takeException(), isNull);
         }
@@ -96,6 +97,8 @@ void main() {
 
       double firstScale() =>
           t.widget<AnimatedScale>(find.byType(AnimatedScale).first).scale;
+      double firstTitleOpacity() =>
+          t.widget<AnimatedOpacity>(find.byType(AnimatedOpacity).first).opacity;
 
       final gesture = await t.createGesture(kind: PointerDeviceKind.mouse);
       addTearDown(gesture.removePointer);
@@ -105,12 +108,15 @@ void main() {
       await t.pumpAndSettle();
       expect(starts, 1);
       expect(ends, 0);
-      expect(firstScale(), greaterThan(1.0));
+      expect(find.byType(Tooltip), findsNothing);
+      expect(firstScale(), 1.2);
+      expect(firstTitleOpacity(), 0.0);
 
       await gesture.moveTo(const Offset(1, 1));
       await t.pumpAndSettle();
       expect(ends, 1);
       expect(firstScale(), 1.0);
+      expect(firstTitleOpacity(), 1.0);
 
       await t.tap(find.text('番剧 11'));
       await t.pumpAndSettle();
