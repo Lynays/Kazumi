@@ -14,6 +14,7 @@ abstract class _PopularController with Store {
   static const int _maxTrendPages = 5;
 
   int _trendPagesRequested = 0;
+  int _trendNextOffset = 0;
   int _activeTrendViews = 0;
   bool _trendExhausted = false;
   bool _loadingTrend = false;
@@ -82,7 +83,10 @@ abstract class _PopularController with Store {
     runInAction(() {
       currentTag = s;
       isLoadingMore = s.isEmpty && _loadingTrend;
-      isTimeOut = s.isEmpty && _trendExhausted && trendList.isEmpty;
+      isTimeOut =
+          s.isEmpty &&
+          (_trendExhausted || _trendPagesRequested > 0) &&
+          trendList.isEmpty;
     });
   }
 
@@ -100,6 +104,7 @@ abstract class _PopularController with Store {
     if (type == 'init') {
       trendList.clear();
       _trendPagesRequested = 0;
+      _trendNextOffset = 0;
       _trendExhausted = false;
     }
     if (!_canPrefetchTrend) return;
@@ -111,13 +116,20 @@ abstract class _PopularController with Store {
       final useMirror = _bangumiMirrorEnabled;
       final seenIds = trendList.map((item) => item.id).toSet();
       while (_canPrefetchTrend) {
-        final offset = _trendPagesRequested * _trendPageSize;
+        final offset = _trendNextOffset;
         _trendPagesRequested++;
         final result = await fetchTrendPage(
           useMirror: useMirror,
           limit: _trendPageSize,
           offset: offset,
         );
+        if (result.isEmpty) {
+          // BangumiApi swallows network errors and returns []; stop this pass
+          // without advancing _trendNextOffset or marking exhausted so a later
+          // reopen/tag-return retries the failed offset (still capped by _maxTrendPages).
+          break;
+        }
+        _trendNextOffset += _trendPageSize;
         trendList.addAll(
           result
               .where((item) => seenIds.add(item.id))

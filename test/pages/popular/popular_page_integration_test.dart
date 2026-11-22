@@ -214,6 +214,46 @@ void main() {
         expect(t.takeException(), isNull);
       },
     );
+
+    testWidgets(
+      'retries failed trend page at the same offset after partial success',
+      (t) async {
+        var failSecondPage = true;
+        final controller = _FakePopularController(
+          onTrendPage: (offset) async {
+            if (failSecondPage && offset == 24) {
+              return const <BangumiItem>[];
+            }
+            return List.generate(24, (i) => _item(offset + i + 1));
+          },
+        );
+        controller.attachTrendView();
+
+        await controller.queryBangumiByTrend();
+        expect(controller.trendOffsets, [0, 24]);
+        expect(controller.trendList.length, 24);
+        expect(controller.isTimeOut, isFalse);
+
+        failSecondPage = false;
+        await controller.queryBangumiByTrend();
+        expect(controller.trendOffsets, [0, 24, 24, 48]);
+        expect(controller.trendList.length, 70);
+        expect(controller.isTimeOut, isFalse);
+
+        final shortController = _FakePopularController(
+          onTrendPage: (offset) async => List.generate(
+            offset == 0 ? 24 : 12,
+            (i) => _item(offset + i + 1),
+          ),
+        );
+        shortController.attachTrendView();
+
+        await shortController.queryBangumiByTrend();
+        await shortController.queryBangumiByTrend();
+        expect(shortController.trendOffsets, [0, 24]);
+        expect(shortController.trendList.length, 36);
+      },
+    );
   });
 }
 
