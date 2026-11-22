@@ -5,6 +5,8 @@ import 'package:kazumi/bean/widget/bangumi_mirror_error_widget.dart';
 import 'package:kazumi/bean/widget/kazumi_menu.dart';
 import 'package:kazumi/modules/bangumi/bangumi_item.dart';
 import 'package:kazumi/pages/popular/popular_controller.dart';
+import 'package:kazumi/pages/popular/popular_dashboard.dart';
+import 'package:kazumi/pages/popular/popular_sections.dart';
 import 'package:kazumi/bean/card/bangumi_card.dart';
 import 'package:kazumi/utils/constants.dart';
 import 'package:flutter_mobx/flutter_mobx.dart';
@@ -15,10 +17,7 @@ import 'package:kazumi/bean/appbar/drag_to_move_bar.dart' as dtb;
 import 'package:kazumi/utils/device.dart';
 
 class PopularPage extends StatefulWidget {
-  const PopularPage({
-    super.key,
-    required this.controller,
-  });
+  const PopularPage({super.key, required this.controller});
 
   final PopularController controller;
 
@@ -27,6 +26,9 @@ class PopularPage extends StatefulWidget {
 }
 
 class _PopularPageState extends State<PopularPage> {
+  static const double _expandedToolbarHeight = 120;
+  static const double _progressHeight = 4;
+
   late final ScrollController scrollController;
   PopularController get popularController => widget.controller;
 
@@ -37,13 +39,15 @@ class _PopularPageState extends State<PopularPage> {
       initialScrollOffset: popularController.scrollOffset,
     );
     scrollController.addListener(scrollListener);
-    if (popularController.trendList.isEmpty) {
-      popularController.queryBangumiByTrend();
+    popularController.attachTrendView();
+    if (popularController.currentTag.isEmpty) {
+      _loadTrend();
     }
   }
 
   @override
   void dispose() {
+    popularController.detachTrendView();
     scrollController.removeListener(scrollListener);
     scrollController.dispose();
     super.dispose();
@@ -51,74 +55,104 @@ class _PopularPageState extends State<PopularPage> {
 
   void scrollListener() {
     popularController.scrollOffset = scrollController.offset;
-    if (scrollController.position.pixels >=
+    if (popularController.currentTag.isNotEmpty &&
+        scrollController.position.pixels >=
             scrollController.position.maxScrollExtent - 200 &&
         !popularController.isLoadingMore) {
-      KazumiLogger()
-          .i('PopularPageController: Fetching next recommendation batch');
-      if (popularController.currentTag != '') {
-        popularController.queryBangumiByTag();
-      } else {
-        popularController.queryBangumiByTrend();
-      }
+      KazumiLogger().i(
+        'PopularPageController: Fetching next recommendation batch',
+      );
+      popularController.queryBangumiByTag();
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: CustomScrollView(
-        controller: scrollController,
-        slivers: [
-          buildSliverAppBar(),
-          SliverToBoxAdapter(
-            child: Observer(
-              builder: (_) => AnimatedOpacity(
-                opacity: popularController.isLoadingMore ? 1.0 : 0.0,
-                duration: const Duration(milliseconds: 300),
-                child: popularController.isLoadingMore
-                    ? const LinearProgressIndicator(minHeight: 4)
-                    : const SizedBox(height: 4),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final viewportHeight =
+              constraints.maxHeight -
+              MediaQuery.paddingOf(context).top -
+              _expandedToolbarHeight -
+              _progressHeight;
+          return CustomScrollView(
+            controller: scrollController,
+            slivers: [
+              buildSliverAppBar(),
+              SliverToBoxAdapter(
+                child: Observer(
+                  builder: (_) => AnimatedOpacity(
+                    opacity: popularController.isLoadingMore ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 300),
+                    child: popularController.isLoadingMore
+                        ? const LinearProgressIndicator(
+                            minHeight: _progressHeight,
+                          )
+                        : const SizedBox(height: _progressHeight),
+                  ),
+                ),
               ),
-            ),
-          ),
-          SliverPadding(
-              padding: const EdgeInsets.fromLTRB(
-                  StyleString.cardSpace, 0, StyleString.cardSpace, 0),
-              sliver: Observer(builder: (_) {
-                if (popularController.isTimeOut) {
-                  return SliverToBoxAdapter(
-                    child: SizedBox(
-                      height: 400,
-                      child: BangumiMirrorErrorWidget(
-                        onRetry: () {
-                          if (popularController.trendList.isEmpty) {
-                            popularController.queryBangumiByTrend();
-                          } else {
-                            popularController.queryBangumiByTag();
-                          }
-                        },
-                        onSettingsReturned: () {
-                          if (mounted) {
-                            setState(() {});
-                          }
-                        },
-                      ),
-                    ),
-                  );
-                }
-                return contentGrid(
-                  (popularController.currentTag == '')
-                      ? popularController.trendList
-                      : popularController.bangumiList,
-                );
-              })),
-        ],
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(
+                  StyleString.cardSpace,
+                  0,
+                  StyleString.cardSpace,
+                  0,
+                ),
+                sliver: Observer(builder: (_) => _buildResults(viewportHeight)),
+              ),
+            ],
+          );
+        },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => scrollController.animateTo(0,
-            duration: const Duration(milliseconds: 350), curve: Curves.easeOut),
-        child: const Icon(Icons.arrow_upward),
+      floatingActionButton: Observer(
+        builder: (_) {
+          if (popularController.currentTag.isEmpty) {
+            return const SizedBox.shrink();
+          }
+          return FloatingActionButton(
+            onPressed: () => scrollController.animateTo(
+              0,
+              duration: const Duration(milliseconds: 350),
+              curve: Curves.easeOut,
+            ),
+            child: const Icon(Icons.arrow_upward),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildResults(double viewportHeight) {
+    if (popularController.isTimeOut) {
+      return SliverToBoxAdapter(
+        child: SizedBox(
+          height: 400,
+          child: BangumiMirrorErrorWidget(
+            onRetry: () {
+              if (popularController.currentTag.isEmpty) {
+                popularController.queryBangumiByTrend(type: 'init');
+              } else {
+                popularController.queryBangumiByTag();
+              }
+            },
+            onSettingsReturned: () {
+              if (mounted) {
+                setState(() {});
+              }
+            },
+          ),
+        ),
+      );
+    }
+    if (popularController.currentTag.isNotEmpty) {
+      return contentGrid(popularController.bangumiList);
+    }
+    return SliverToBoxAdapter(
+      child: PopularDashboard(
+        sections: splitPopularItems(popularController.trendList),
+        viewportHeight: viewportHeight,
       ),
     );
   }
@@ -143,16 +177,13 @@ class _PopularPageState extends State<PopularPage> {
           crossAxisCount: crossCount,
           mainAxisExtent:
               MediaQuery.of(context).size.width / crossCount / 0.65 +
-                  MediaQuery.textScalerOf(context).scale(32.0),
+              MediaQuery.textScalerOf(context).scale(32.0),
         ),
-        delegate: SliverChildBuilderDelegate(
-          (BuildContext context, int index) {
-            return bangumiList.isNotEmpty
-                ? BangumiCardV(bangumiItem: bangumiList[index])
-                : null;
-          },
-          childCount: bangumiList.isNotEmpty ? bangumiList.length : 10,
-        ),
+        delegate: SliverChildBuilderDelegate((BuildContext context, int index) {
+          return bangumiList.isNotEmpty
+              ? BangumiCardV(bangumiItem: bangumiList[index])
+              : null;
+        }, childCount: bangumiList.isNotEmpty ? bangumiList.length : 10),
       ),
     );
   }
@@ -162,7 +193,7 @@ class _PopularPageState extends State<PopularPage> {
     return SliverAppBar(
       pinned: true,
       stretch: true,
-      expandedHeight: 120,
+      expandedHeight: _expandedToolbarHeight,
       elevation: 0,
       titleSpacing: 0,
       centerTitle: false,
@@ -173,8 +204,10 @@ class _PopularPageState extends State<PopularPage> {
         child: dtb.DragToMoveArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final double maxExtent = 120 - MediaQuery.of(context).padding.top;
-              final t = (1 -
+              final double maxExtent =
+                  _expandedToolbarHeight - MediaQuery.of(context).padding.top;
+              final t =
+                  (1 -
                   ((constraints.maxHeight - kToolbarHeight) /
                           (maxExtent - kToolbarHeight))
                       .clamp(0.0, 1.0));
@@ -185,7 +218,11 @@ class _PopularPageState extends State<PopularPage> {
                 alignment: Alignment.centerLeft,
                 child: Padding(
                   padding: const EdgeInsets.only(
-                      left: 16, top: 8, bottom: 8, right: 60),
+                    left: 16,
+                    top: 8,
+                    bottom: 8,
+                    right: 60,
+                  ),
                   child: SizedBox(
                     height: 44,
                     child: Observer(
@@ -211,15 +248,21 @@ class _PopularPageState extends State<PopularPage> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(
-                                  isTrend ? '热门番组' : popularController.currentTag,
-                                  style: theme.textTheme.headlineMedium!.copyWith(
-                                    fontWeight: fontWeight,
-                                    fontSize: fontSize,
-                                  ),
+                                  isTrend
+                                      ? '热门番组'
+                                      : popularController.currentTag,
+                                  style: theme.textTheme.headlineMedium!
+                                      .copyWith(
+                                        fontWeight: fontWeight,
+                                        fontSize: fontSize,
+                                      ),
                                 ),
                                 const SizedBox(width: 4),
-                                Icon(Icons.keyboard_arrow_down,
-                                    size: fontSize, color: theme.iconTheme.color),
+                                Icon(
+                                  Icons.keyboard_arrow_down,
+                                  size: fontSize,
+                                  color: theme.iconTheme.color,
+                                ),
                               ],
                             ),
                           ),
@@ -260,16 +303,21 @@ class _PopularPageState extends State<PopularPage> {
 
   Future<void> _selectTag(String selected) async {
     if (!mounted || selected == popularController.currentTag) return;
-    scrollController.animateTo(0,
-        duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+    scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+    );
     popularController.setCurrentTag(selected);
     if (selected.isEmpty) {
       popularController.clearBangumiList();
-      if (popularController.trendList.isEmpty) {
-        await popularController.queryBangumiByTrend();
-      }
+      await _loadTrend();
     } else {
       await popularController.queryBangumiByTag(type: 'init');
     }
   }
+
+  Future<void> _loadTrend() => popularController.queryBangumiByTrend(
+    type: popularController.trendList.isEmpty ? 'init' : 'add',
+  );
 }
