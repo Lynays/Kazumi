@@ -59,13 +59,16 @@ class PopularFeaturedCard extends StatelessWidget {
                 ? h * 16 / scaledTitleSize
                 : h;
             final compact = textHeight < 240;
+            final tight = textHeight < 144;
             final titleStyle =
                 (compact
                         ? theme.textTheme.titleMedium
                         : theme.textTheme.headlineMedium)
                     ?.copyWith(
                       color: Colors.white,
-                      fontSize: compact ? null : (w >= 560 ? 36 : 30),
+                      fontSize: compact
+                          ? null
+                          : (w >= 560 && textHeight >= 260 ? 36 : 30),
                       fontWeight: FontWeight.w600,
                       height: 1.1,
                     );
@@ -135,9 +138,9 @@ class PopularFeaturedCard extends StatelessWidget {
                   Padding(
                     padding: EdgeInsets.fromLTRB(
                       compact ? 12 : 30,
-                      12,
+                      tight ? 8 : 12,
                       16,
-                      compact ? 12 : 22,
+                      tight ? 8 : (compact ? 12 : 22),
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
@@ -154,7 +157,7 @@ class PopularFeaturedCard extends StatelessWidget {
                                 icon: Icons.emoji_events_rounded,
                                 r: 12,
                               ),
-                              SizedBox(height: compact ? 6 : 10),
+                              SizedBox(height: tight ? 4 : (compact ? 6 : 10)),
                               titleText,
                               if (rawTitle.isNotEmpty &&
                                   rawTitle != title &&
@@ -216,8 +219,10 @@ class PopularFeaturedCard extends StatelessWidget {
                                   ),
                                 ),
                               ],
-                              if (textHeight >= 120) ...[
-                                SizedBox(height: compact ? 8 : 12),
+                              if (textHeight >= 128) ...[
+                                SizedBox(
+                                  height: tight ? 6 : (compact ? 8 : 12),
+                                ),
                                 _pill(
                                   accent,
                                   onAccent,
@@ -226,7 +231,7 @@ class PopularFeaturedCard extends StatelessWidget {
                                   glowColor: accent,
                                   r: 10,
                                   px: compact ? 16 : 20,
-                                  py: compact ? 7 : 10,
+                                  py: tight ? 5 : (compact ? 7 : 10),
                                 ),
                               ],
                             ],

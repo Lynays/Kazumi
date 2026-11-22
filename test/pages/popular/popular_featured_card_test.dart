@@ -62,6 +62,17 @@ void main() {
       expect(find.text('TOP 1'), findsOneWidget);
       expect(find.text('查看详情'), findsOneWidget);
       expect(t.takeException(), isNull);
+
+      await _pumpCard(t, item, size: const Size(320, 120));
+      expect(find.text('TOP 1'), findsOneWidget);
+      expect(find.text('8.4'), findsOneWidget);
+      expect(find.text('查看详情'), findsNothing);
+      expect(t.takeException(), isNull);
+
+      await _pumpCard(t, item, size: const Size(320, 96));
+      expect(find.text('TOP 1'), findsOneWidget);
+      expect(find.text('查看详情'), findsNothing);
+      expect(t.takeException(), isNull);
     });
 
     testWidgets('exposes semantics and pushes /info/ on tap', (t) async {
