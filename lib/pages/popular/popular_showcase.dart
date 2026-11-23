@@ -34,9 +34,8 @@ class PopularShowcase extends StatelessWidget {
             : PopularFeaturedCard(item: featured!);
 
         if (w < _narrowBreak && mosaic.isNotEmpty) {
-          final netH = boundedH
-              ? (c.maxHeight - _gap).clamp(120.0, double.infinity)
-              : 0.0;
+          final gap = boundedH ? _gap.clamp(0.0, c.maxHeight) : _gap;
+          final netH = boundedH ? c.maxHeight - gap : 0.0;
           final topH = boundedH ? netH * 0.56 : 200.0;
           final bottomH = boundedH ? netH - topH : 160.0;
           return Column(
@@ -44,7 +43,7 @@ class PopularShowcase extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               SizedBox(height: topH, child: leftWidget),
-              const SizedBox(height: _gap),
+              SizedBox(height: gap),
               SizedBox(
                 height: bottomH,
                 child: PopularRankMosaic(items: mosaic),

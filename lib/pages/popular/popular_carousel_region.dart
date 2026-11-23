@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:kazumi/modules/bangumi/bangumi_item.dart';
 import 'package:kazumi/pages/popular/popular_carousel_floor.dart';
@@ -29,11 +30,15 @@ class _PopularCarouselRegionState extends State<PopularCarouselRegion>
   late final Ticker _ticker;
   final List<double> _opacities = [1.0, 1.0, 1.0];
   final List<bool> _seeded = [false, false, false];
+  final List<bool> _visibleRows = List.filled(_rowCount, false);
+  final List<GlobalKey> _rowKeys = List.generate(_rowCount, (_) => GlobalKey());
   final List<Timer?> _resetTimers = List<Timer?>.filled(_rowCount, null);
   final Set<int> _interactingRows = <int>{};
   final Set<int> _resettingRows = <int>{};
 
   Duration? _lastTick;
+  ScrollPosition? _verticalPosition;
+  bool _viewportUpdatePending = false;
   bool _appResumed = true;
   bool _tickerEnabled = true;
   bool _reduceMotion = false;
@@ -49,13 +54,12 @@ class _PopularCarouselRegionState extends State<PopularCarouselRegion>
     WidgetsBinding.instance.addObserver(this);
     _controllers = List.generate(_rowCount, (_) => ScrollController());
     _ticker = createTicker(_onTick);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _seedOffsets());
   }
 
   @override
   void didUpdateWidget(PopularCarouselRegion oldWidget) {
     super.didUpdateWidget(oldWidget);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _seedOffsets());
+    _scheduleViewportUpdate();
   }
 
   @override
@@ -63,8 +67,18 @@ class _PopularCarouselRegionState extends State<PopularCarouselRegion>
     super.didChangeDependencies();
     _tickerEnabled = TickerMode.valuesOf(context).enabled;
     _reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final position = Scrollable.maybeOf(context, axis: Axis.vertical)?.position;
+    if (_verticalPosition != position) {
+      _verticalPosition?.removeListener(_scheduleViewportUpdate);
+      _verticalPosition = position;
+      position?.addListener(_scheduleViewportUpdate);
+    }
+    _scheduleViewportUpdate();
     _syncTicker(notify: false);
   }
+
+  @override
+  void didChangeMetrics() => _scheduleViewportUpdate();
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -76,6 +90,7 @@ class _PopularCarouselRegionState extends State<PopularCarouselRegion>
   void dispose() {
     _disposed = true;
     WidgetsBinding.instance.removeObserver(this);
+    _verticalPosition?.removeListener(_scheduleViewportUpdate);
     _ticker.dispose();
     for (final t in _resetTimers) {
       t?.cancel();
@@ -89,7 +104,7 @@ class _PopularCarouselRegionState extends State<PopularCarouselRegion>
   void _seedOffsets() {
     if (!mounted || _disposed || _reduceMotion) return;
     for (var i = 0; i < _rowCount; i++) {
-      if (_seeded[i]) continue;
+      if (_seeded[i] || !_visibleRows[i]) continue;
       final c = _controllers[i];
       if (!c.hasClients) continue;
       final max = c.position.maxScrollExtent;
@@ -102,9 +117,49 @@ class _PopularCarouselRegionState extends State<PopularCarouselRegion>
     }
   }
 
+  void _scheduleViewportUpdate() {
+    if (_viewportUpdatePending || _disposed) return;
+    _viewportUpdatePending = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _viewportUpdatePending = false;
+      if (!mounted || _disposed) return;
+      for (var i = 0; i < _rowCount; i++) {
+        final row = _rowKeys[i].currentContext?.findRenderObject();
+        final visible = row is RenderBox && row.hasSize && _isVisible(row);
+        if (_visibleRows[i] && !visible) _cancelRowReset(i);
+        _visibleRows[i] = visible;
+      }
+      _seedOffsets();
+      _syncTicker();
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  bool _isVisible(RenderBox row) {
+    final viewport = RenderAbstractViewport.maybeOf(row);
+    if (viewport == null) return !row.size.isEmpty;
+    final bounds = MatrixUtils.transformRect(
+      row.getTransformTo(viewport),
+      row.paintBounds,
+    );
+    return !bounds.isEmpty && viewport.paintBounds.overlaps(bounds);
+  }
+
+  bool _canScrollRow(int row) {
+    final controller = _controllers[row];
+    if (!_visibleRows[row] ||
+        !controller.hasClients ||
+        !controller.position.hasContentDimensions) {
+      return false;
+    }
+    final max = controller.position.maxScrollExtent;
+    return max.isFinite && max > 0.5;
+  }
+
   void _syncTicker({bool notify = true}) {
     if (_disposed) return;
-    final shouldRun = _canAutoScroll;
+    final shouldRun =
+        _canAutoScroll && _visibleRows.asMap().keys.any(_canScrollRow);
     if (shouldRun && !_ticker.isActive) {
       _lastTick = null;
       _ticker.start();
@@ -163,11 +218,13 @@ class _PopularCarouselRegionState extends State<PopularCarouselRegion>
     if (dt <= 0) return;
 
     for (var i = 0; i < _rowCount; i++) {
-      if (_interactingRows.contains(i) || _resettingRows.contains(i)) continue;
+      if (!_canScrollRow(i) ||
+          _interactingRows.contains(i) ||
+          _resettingRows.contains(i)) {
+        continue;
+      }
       final c = _controllers[i];
-      if (!c.hasClients) continue;
       final max = c.position.maxScrollExtent;
-      if (!max.isFinite || max <= 0.5) continue;
       final next = c.offset + _speeds[i] * dt;
       if (next >= max - 0.5) {
         _startRowReset(i, c);
@@ -178,13 +235,19 @@ class _PopularCarouselRegionState extends State<PopularCarouselRegion>
   }
 
   void _startRowReset(int row, ScrollController c) {
-    if (!_canAutoScroll || _interactingRows.contains(row)) return;
+    if (!_canAutoScroll ||
+        !_visibleRows[row] ||
+        _interactingRows.contains(row)) {
+      return;
+    }
     _resetTimers[row]?.cancel();
     _resettingRows.add(row);
     if (mounted && !_disposed) setState(() => _opacities[row] = 0.0);
     _resetTimers[row] = Timer(const Duration(milliseconds: 180), () {
       if (!mounted || _disposed) return;
-      if (!_canAutoScroll || _interactingRows.contains(row)) {
+      if (!_canAutoScroll ||
+          !_visibleRows[row] ||
+          _interactingRows.contains(row)) {
         _cancelRowReset(row);
         return;
       }
@@ -201,36 +264,44 @@ class _PopularCarouselRegionState extends State<PopularCarouselRegion>
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (_, c) {
+        _scheduleViewportUpdate();
         final totalH =
             c.hasBoundedHeight && c.maxHeight.isFinite && c.maxHeight > 0
             ? c.maxHeight
             : 600.0;
         final netH = (totalH - _gap * 2).clamp(180.0, double.infinity);
 
-        return PopularCarouselFloor(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (var i = 0; i < _rowCount; i++) ...[
-                if (i > 0) const SizedBox(height: _gap),
-                AnimatedOpacity(
-                  opacity: _opacities[i],
-                  duration: _reduceMotion
-                      ? Duration.zero
-                      : const Duration(milliseconds: 180),
-                  child: PopularCarouselStrip(
-                    items: i < widget.rows.length
-                        ? widget.rows[i]
-                        : const <BangumiItem>[],
-                    controller: _controllers[i],
-                    height: netH * _weights[i],
-                    onUserInteractionStart: () => _onRowInteractionStart(i),
-                    onUserInteractionEnd: () => _onRowInteractionEnd(i),
+        return NotificationListener<ScrollMetricsNotification>(
+          onNotification: (_) {
+            _scheduleViewportUpdate();
+            return false;
+          },
+          child: PopularCarouselFloor(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < _rowCount; i++) ...[
+                  if (i > 0) const SizedBox(height: _gap),
+                  AnimatedOpacity(
+                    key: _rowKeys[i],
+                    opacity: _opacities[i],
+                    duration: _reduceMotion
+                        ? Duration.zero
+                        : const Duration(milliseconds: 180),
+                    child: PopularCarouselStrip(
+                      items: i < widget.rows.length
+                          ? widget.rows[i]
+                          : const <BangumiItem>[],
+                      controller: _controllers[i],
+                      height: netH * _weights[i],
+                      onUserInteractionStart: () => _onRowInteractionStart(i),
+                      onUserInteractionEnd: () => _onRowInteractionEnd(i),
+                    ),
                   ),
-                ),
+                ],
               ],
-            ],
+            ),
           ),
         );
       },

@@ -39,6 +39,24 @@ void main() {
       expect(t.takeException(), isNull);
     });
 
+    testWidgets('falls back for short showcases and undersized mosaic tiles', (
+      t,
+    ) async {
+      final mosaic = List.generate(9, (i) => _item(i + 2));
+      for (final size in const [Size(320, 80), Size(480, 360)]) {
+        await _pumpShowcase(t, _item(1), mosaic, size: size);
+        final mosaicList = find.descendant(
+          of: find.byType(PopularRankMosaic),
+          matching: find.byType(ListView),
+        );
+        expect(mosaicList, findsOneWidget);
+        expect(t.widget<ListView>(mosaicList).scrollDirection, Axis.horizontal);
+        final showcaseRect = t.getRect(find.byType(PopularShowcase));
+        expect(t.getRect(mosaicList).bottom, closeTo(showcaseRect.bottom, 0.5));
+        expect(t.takeException(), isNull);
+      }
+    });
+
     testWidgets('handles missing featured, missing mosaic, and empty state', (
       t,
     ) async {

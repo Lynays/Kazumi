@@ -112,6 +112,65 @@ void main() {
       expect(t.takeException(), isNull);
     });
 
+    testWidgets('pauses offscreen rows and resumes at the same offsets', (
+      t,
+    ) async {
+      final vertical = ScrollController();
+      addTearDown(vertical.dispose);
+      final rows = List.generate(
+        3,
+        (r) => List.generate(16, (i) => _item(r * 20 + i + 11)),
+      );
+      await t.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 480,
+                height: 240,
+                child: SingleChildScrollView(
+                  controller: vertical,
+                  child: Column(
+                    children: [
+                      SizedBox(
+                        height: 204,
+                        child: PopularCarouselRegion(rows: rows),
+                      ),
+                      const SizedBox(height: 300),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      final controllers = t
+          .widgetList<ListView>(find.byType(ListView))
+          .map((list) => list.controller!)
+          .toList();
+      List<double> offsets() =>
+          controllers.map((controller) => controller.offset).toList();
+      await t.pump(const Duration(milliseconds: 50));
+      await t.pump(const Duration(milliseconds: 50));
+      expect(offsets().first, greaterThan(0.0));
+
+      vertical.jumpTo(vertical.position.maxScrollExtent);
+      await t.pump();
+      final paused = offsets();
+      await t.pump(const Duration(milliseconds: 250));
+      expect(offsets(), paused);
+
+      vertical.jumpTo(0);
+      await t.pump();
+      expect(offsets(), paused);
+      await t.pump(const Duration(milliseconds: 50));
+      await t.pump(const Duration(milliseconds: 50));
+      for (var i = 0; i < controllers.length; i++) {
+        expect(controllers[i].offset, greaterThan(paused[i]));
+      }
+    });
+
     testWidgets('cancels pending row reset on hover and reduce-motion', (
       t,
     ) async {
