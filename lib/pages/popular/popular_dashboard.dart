@@ -33,18 +33,22 @@ class PopularDashboard extends StatelessWidget {
       contentHeight - showcaseHeight,
     );
 
-    return SingleChildScrollView(
-      primary: false,
-      child: PopularShowcaseWithCarousels(
-        featured: sections.featured,
-        mosaic: sections.mosaic,
-        showcaseHeight: showcaseHeight,
-        gap: _sectionGap,
-        carousels: SizedBox(
-          height: carouselHeight,
-          child: PopularCarouselRegion(rows: sections.rows),
-        ),
+    final content = PopularShowcaseWithCarousels(
+      featured: sections.featured,
+      mosaic: sections.mosaic,
+      showcaseHeight: showcaseHeight,
+      gap: _sectionGap,
+      carousels: SizedBox(
+        height: carouselHeight,
+        child: PopularCarouselRegion(rows: sections.rows),
       ),
+    );
+    return LayoutBuilder(
+      builder: (_, constraints) {
+        // PopularPage already scrolls its slivers vertically.
+        if (!constraints.hasBoundedHeight) return content;
+        return SingleChildScrollView(primary: false, child: content);
+      },
     );
   }
 }

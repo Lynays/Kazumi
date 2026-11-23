@@ -107,22 +107,29 @@ class PopularCarouselStrip extends StatelessWidget {
                             theme.scaffoldBackgroundColor,
                             ScrollConfiguration(
                               behavior: const _StripScrollBehavior(),
-                              child: ListView.separated(
+                              child: ListView.custom(
                                 controller: controller,
                                 scrollDirection: Axis.horizontal,
                                 padding: EdgeInsets.symmetric(
                                   horizontal: sidePadding,
                                   vertical: vPad,
                                 ),
-                                itemCount: items.length,
-                                separatorBuilder: (_, _) =>
-                                    SizedBox(width: gap),
-                                itemBuilder: (_, i) => _StripCard(
-                                  item: items[i],
-                                  posterSize: Size(posterW, posterH),
-                                  reflectHeight: reflectH,
-                                  compact: compact,
-                                  titleStyle: cardTitleStyle,
+                                itemExtentBuilder: (i, _) =>
+                                    i.isEven ? posterW : gap,
+                                semanticChildCount: items.length,
+                                childrenDelegate: _StripItemsDelegate(
+                                  (_, i) => i.isOdd
+                                      ? const SizedBox.shrink()
+                                      : _StripCard(
+                                          item: items[i ~/ 2],
+                                          posterSize: Size(posterW, posterH),
+                                          reflectHeight: reflectH,
+                                          compact: compact,
+                                          titleStyle: cardTitleStyle,
+                                        ),
+                                  itemCount: items.length,
+                                  posterWidth: posterW,
+                                  gap: gap,
                                 ),
                               ),
                             ),
@@ -136,6 +143,30 @@ class PopularCarouselStrip extends StatelessWidget {
       ),
     );
   }
+}
+
+class _StripItemsDelegate extends SliverChildBuilderDelegate {
+  _StripItemsDelegate(
+    super.builder, {
+    required int itemCount,
+    required double posterWidth,
+    required double gap,
+  }) : _scrollExtent = itemCount * posterWidth + (itemCount - 1) * gap,
+       super(
+         childCount: itemCount * 2 - 1,
+         semanticIndexCallback: (_, index) => index.isEven ? index ~/ 2 : null,
+       );
+
+  final double _scrollExtent;
+
+  // With alternating extents, Flutter can still estimate the unseen tail.
+  @override
+  double estimateMaxScrollOffset(
+    int firstIndex,
+    int lastIndex,
+    double leadingScrollOffset,
+    double trailingScrollOffset,
+  ) => _scrollExtent;
 }
 
 class _StripInteractionShell extends StatefulWidget {
@@ -255,25 +286,26 @@ class _StripCardState extends State<_StripCard> {
     return Semantics(
       button: true,
       label: title,
-      child: SizedBox(
-        width: size.width,
-        height: size.height + widget.reflectHeight,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: size.width,
-              height: size.height,
-              child: MouseRegion(
-                cursor: SystemMouseCursors.click,
-                onEnter: (_) => setState(() => _hovered = true),
-                onExit: (_) => setState(() => _hovered = false),
-                child: Material(
-                  type: MaterialType.transparency,
-                  child: InkWell(
-                    borderRadius: radius,
-                    hoverColor: Colors.transparent,
-                    onTap: () => context.pushNamed('/info/', arguments: item),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          borderRadius: radius,
+          hoverColor: Colors.transparent,
+          splashColor: Colors.transparent,
+          onTap: () => context.pushNamed('/info/', arguments: item),
+          child: SizedBox(
+            width: size.width,
+            height: size.height + widget.reflectHeight,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: size.width,
+                  height: size.height,
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    onEnter: (_) => setState(() => _hovered = true),
+                    onExit: (_) => setState(() => _hovered = false),
                     child: AnimatedContainer(
                       duration: animDur,
                       curve: Curves.easeOutCubic,
@@ -360,15 +392,15 @@ class _StripCardState extends State<_StripCard> {
                     ),
                   ),
                 ),
-              ),
+                PopularFloorReflection(
+                  cover: cover,
+                  size: size,
+                  depth: widget.reflectHeight,
+                  foreground: true,
+                ),
+              ],
             ),
-            PopularFloorReflection(
-              cover: cover,
-              size: size,
-              depth: widget.reflectHeight,
-              foreground: true,
-            ),
-          ],
+          ),
         ),
       ),
     );

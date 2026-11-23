@@ -98,7 +98,8 @@ class _PopularRankMosaicState extends State<PopularRankMosaic> {
         for (final r in rects) {
           minSide = math.min(minSide, math.min(r.width, r.height));
         }
-        if (rects.length != visible.length || minSide < 42) {
+        if (rects.length != visible.length ||
+            minSide < kMinInteractiveDimension) {
           return _buildNarrowFallback(ctx, visible, h);
         }
 
@@ -158,8 +159,13 @@ class _PopularRankMosaicState extends State<PopularRankMosaic> {
     List<BangumiItem> items,
     double maxH,
   ) {
-    final h = maxH.isFinite && maxH > 0 ? maxH : 150.0;
-    final tileH = (h - 16).clamp(48.0, 200.0);
+    final h = maxH.isFinite ? maxH : 150.0;
+    if (h <= 0) return const SizedBox.shrink();
+    final verticalPadding = ((h - kMinInteractiveDimension) / 2).clamp(
+      0.0,
+      8.0,
+    );
+    final tileH = math.min(h - verticalPadding * 2, 200.0);
     final tileW = (tileH * 0.72).clamp(68.0, 148.0);
     return SizedBox(
       height: h,
@@ -169,19 +175,21 @@ class _PopularRankMosaicState extends State<PopularRankMosaic> {
         ),
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          padding: EdgeInsets.symmetric(vertical: verticalPadding),
           itemCount: items.length,
           separatorBuilder: (_, _) => const SizedBox(width: 10),
-          itemBuilder: (_, i) => SizedBox(
-            width: tileW,
-            height: tileH,
-            child: _MosaicTile(
-              item: items[i],
-              rank: i + 2,
-              size: Size(tileW, tileH),
-              hovered: _hoveredIndex == i,
-              anyHovered: _hoveredIndex != null,
-              onHover: (v) => _setHover(i, v),
+          itemBuilder: (_, i) => Center(
+            child: SizedBox(
+              width: tileW,
+              height: tileH,
+              child: _MosaicTile(
+                item: items[i],
+                rank: i + 2,
+                size: Size(tileW, tileH),
+                hovered: _hoveredIndex == i,
+                anyHovered: _hoveredIndex != null,
+                onHover: (v) => _setHover(i, v),
+              ),
             ),
           ),
         ),

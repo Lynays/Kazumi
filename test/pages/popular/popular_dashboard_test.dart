@@ -80,6 +80,45 @@ void main() {
         }
       },
     );
+
+    testWidgets('uses the outer scroll view when hosted in a sliver', (
+      t,
+    ) async {
+      final outer = ScrollController();
+      addTearDown(outer.dispose);
+      final sections = splitPopularItems(
+        List.generate(70, (i) => _item(i + 1)),
+      );
+      await t.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 780,
+                height: 300,
+                child: CustomScrollView(
+                  controller: outer,
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: PopularDashboard(
+                        sections: sections,
+                        viewportHeight: 300,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(find.byType(SingleChildScrollView), findsNothing);
+      expect(outer.position.maxScrollExtent, closeTo(116, 0.5));
+      await t.drag(find.byType(CustomScrollView), const Offset(0, -100));
+      await t.pump();
+      expect(outer.offset, greaterThan(0.0));
+      expect(t.takeException(), isNull);
+    });
   });
 }
 
