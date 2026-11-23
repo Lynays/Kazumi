@@ -27,7 +27,8 @@ void main() {
       expect(find.text('葬送的芙莉莲'), findsOneWidget);
       expect(find.text('9.2'), findsOneWidget);
       expect(find.text('勇者一行打倒魔王之后 的故事。'), findsOneWidget);
-      expect(find.text('查看详情'), findsOneWidget);
+      expect(find.text('立即观看'), findsOneWidget);
+      expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget);
 
       final imgs = t.widgetList<NetworkImgLayer>(find.byType(NetworkImgLayer));
       expect(imgs.length, 1);
@@ -60,18 +61,18 @@ void main() {
       await _pumpCard(t, item, size: const Size(320, 130));
 
       expect(find.text('TOP 1'), findsOneWidget);
-      expect(find.text('查看详情'), findsOneWidget);
+      expect(find.text('立即观看'), findsOneWidget);
       expect(t.takeException(), isNull);
 
       await _pumpCard(t, item, size: const Size(320, 120));
       expect(find.text('TOP 1'), findsOneWidget);
       expect(find.text('8.4'), findsOneWidget);
-      expect(find.text('查看详情'), findsNothing);
+      expect(find.text('立即观看'), findsNothing);
       expect(t.takeException(), isNull);
 
       await _pumpCard(t, item, size: const Size(320, 96));
       expect(find.text('TOP 1'), findsOneWidget);
-      expect(find.text('查看详情'), findsNothing);
+      expect(find.text('立即观看'), findsNothing);
       expect(t.takeException(), isNull);
     });
 

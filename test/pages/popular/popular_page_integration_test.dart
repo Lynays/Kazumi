@@ -108,6 +108,7 @@ void main() {
         await _pumpPopularPage(t, controller, size: const Size(1280, 420));
 
         expect(find.byType(PopularDashboard), findsOneWidget);
+        expect(find.byType(SliverAppBar), findsNothing);
         expect(find.byType(SliverGrid), findsNothing);
         expect(find.byType(FloatingActionButton), findsNothing);
         expect(controller.trendList.length, 70);
@@ -117,15 +118,9 @@ void main() {
         await t.pump();
         expect(controller.trendOffsets.length, trendCallsBeforeScroll);
 
-        await t.tap(
-          find.descendant(
-            of: find.byType(SliverAppBar),
-            matching: find.text('热门番组'),
-          ),
-        );
-        await t.pump();
-        await t.pump(const Duration(milliseconds: 300));
-        await t.tap(find.text('日常').last);
+        // External shell switches to a category tag.
+        controller.setCurrentTag('日常');
+        await controller.queryBangumiByTag(type: 'init');
         await t.pump();
         await t.pump(const Duration(milliseconds: 300));
 
@@ -140,16 +135,14 @@ void main() {
         await t.drag(find.byType(CustomScrollView), const Offset(0, -700));
         await t.pump();
         expect(controller.tagOffsets.length, 2);
+        expect(controller.scrollOffset, greaterThan(0.0));
 
-        await t.tap(
-          find.descendant(
-            of: find.byType(SliverAppBar),
-            matching: find.text('日常'),
-          ),
+        // External shell returns to Home: MobX reaction must reset scrollOffset to 0.
+        controller.setCurrentTag('');
+        controller.clearBangumiList();
+        await controller.queryBangumiByTrend(
+          type: controller.trendList.isEmpty ? 'init' : 'add',
         );
-        await t.pump();
-        await t.pump(const Duration(milliseconds: 300));
-        await t.tap(find.text('热门番组').last);
         await t.pump();
         await t.pump(const Duration(milliseconds: 300));
 
@@ -183,28 +176,17 @@ void main() {
         expect(find.byType(BangumiMirrorErrorWidget), findsOneWidget);
 
         shouldFailTrend = false;
-        await t.tap(
-          find.descendant(
-            of: find.byType(SliverAppBar),
-            matching: find.text('热门番组'),
-          ),
-        );
-        await t.pump();
-        await t.pump(const Duration(milliseconds: 300));
-        await t.tap(find.text('日常').last);
+        controller.setCurrentTag('日常');
+        await controller.queryBangumiByTag(type: 'init');
         await t.pump();
         await t.pump(const Duration(milliseconds: 300));
         expect(controller.currentTag, '日常');
 
-        await t.tap(
-          find.descendant(
-            of: find.byType(SliverAppBar),
-            matching: find.text('日常'),
-          ),
+        controller.setCurrentTag('');
+        controller.clearBangumiList();
+        await controller.queryBangumiByTrend(
+          type: controller.trendList.isEmpty ? 'init' : 'add',
         );
-        await t.pump();
-        await t.pump(const Duration(milliseconds: 300));
-        await t.tap(find.text('热门番组').last);
         await t.pump();
         await t.pump(const Duration(milliseconds: 300));
 

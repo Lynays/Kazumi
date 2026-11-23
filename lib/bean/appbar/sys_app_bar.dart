@@ -7,6 +7,28 @@ import 'package:kazumi/services/platform/desktop_window_config.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:kazumi/utils/device.dart';
 
+/// 标记外层外壳已提供窗口关闭按钮，避免内嵌页面的 SysAppBar 重复渲染关闭图标。
+class ShellWindowCloseScope extends InheritedWidget {
+  const ShellWindowCloseScope({
+    super.key,
+    required this.handledByShell,
+    required super.child,
+  });
+
+  final bool handledByShell;
+
+  static bool isHandledByShell(BuildContext context) {
+    return context
+            .dependOnInheritedWidgetOfExactType<ShellWindowCloseScope>()
+            ?.handledByShell ??
+        false;
+  }
+
+  @override
+  bool updateShouldNotify(ShellWindowCloseScope oldWidget) =>
+      handledByShell != oldWidget.handledByShell;
+}
+
 class SysAppBar extends StatelessWidget implements PreferredSizeWidget {
   final double? toolbarHeight;
   final Widget? title;
@@ -30,7 +52,8 @@ class SysAppBar extends StatelessWidget implements PreferredSizeWidget {
     final desktop = isDesktop();
     final appBarActions = <Widget>[...?actions];
     if (desktop) {
-      if (!DesktopWindowConfig.showWindowButton) {
+      if (!DesktopWindowConfig.showWindowButton &&
+          !ShellWindowCloseScope.isHandledByShell(context)) {
         appBarActions.add(CloseButton(onPressed: () => windowManager.close()));
       }
       appBarActions.add(const SizedBox(width: 8));

@@ -1,16 +1,37 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:flutter_modular/flutter_modular.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_mobx/flutter_mobx.dart';
+import 'package:flutter_modular/flutter_modular.dart';
+import 'package:kazumi/bean/appbar/sys_app_bar.dart';
 import 'package:kazumi/bean/dialog/dialog_helper.dart';
-import 'package:kazumi/bean/widget/embedded_native_control_area.dart';
 import 'package:kazumi/navigation.dart';
+import 'package:kazumi/pages/menu/cinema_backdrop.dart';
+import 'package:kazumi/pages/menu/cinema_nav_logic.dart';
+import 'package:kazumi/pages/menu/cinema_navigation_bars.dart';
+import 'package:kazumi/pages/menu/cinema_search_bar.dart';
+import 'package:kazumi/pages/menu/cinema_top_bar.dart';
 import 'package:kazumi/pages/menu/route_visibility.dart';
+import 'package:kazumi/pages/popular/popular_controller.dart';
 import 'package:kazumi/pages/router.dart';
+import 'package:kazumi/repositories/search_history_repository.dart';
+import 'package:kazumi/services/platform/desktop_window_config.dart';
+import 'package:kazumi/utils/constants.dart';
+import 'package:kazumi/utils/device.dart';
+import 'package:window_manager/window_manager.dart';
 
 class ScaffoldMenu extends StatefulWidget {
-  const ScaffoldMenu({super.key, required this.location});
+  const ScaffoldMenu({
+    super.key,
+    required this.location,
+    this.popularController,
+    this.historyRepository,
+  });
 
   final String location;
+  final PopularController? popularController;
+  final ISearchHistoryRepository? historyRepository;
 
   @override
   State<ScaffoldMenu> createState() => _ScaffoldMenu();
@@ -18,6 +39,11 @@ class ScaffoldMenu extends StatefulWidget {
 
 class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
   final _outletKey = GlobalKey<RouterOutletState>();
+  final _searchBarKey = GlobalKey();
+  late final PopularController _popularController =
+      widget.popularController ?? inject<PopularController>();
+  late final ISearchHistoryRepository _historyRepository =
+      widget.historyRepository ?? inject<ISearchHistoryRepository>();
   late int _selectedIndex = menu.indexForPath(widget.location);
   DateTime? _lastExitPromptAt;
 
@@ -72,6 +98,78 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
     setState(() => _selectedIndex = index);
   }
 
+  void _handleCinemaNavTap(CinemaNavTab tab) {
+    final targetIndex = resolveCinemaNavTap(
+      currentRouteIndex: _selectedIndex,
+      tapped: tab,
+    );
+    _selectDestination(targetIndex);
+  }
+
+  void _handleHistoryTap() {
+    context.pushNamed('/settings/history/');
+  }
+
+  void _selectHome() {
+    if (_selectedIndex != 0) {
+      _selectDestination(0);
+    }
+    if (_popularController.currentTag.isNotEmpty) {
+      _popularController.scrollOffset = 0.0;
+      _popularController.setCurrentTag('');
+      _popularController.clearBangumiList();
+      unawaited(
+        _popularController.queryBangumiByTrend(
+          type: _popularController.trendList.isEmpty ? 'init' : 'add',
+        ),
+      );
+    }
+  }
+
+  void _selectCategoryTag(String tag) {
+    if (tag.isEmpty) {
+      _selectHome();
+      return;
+    }
+    if (tag != _popularController.currentTag) {
+      _popularController.scrollOffset = 0.0;
+      _popularController.setCurrentTag(tag);
+      unawaited(_popularController.queryBangumiByTag(type: 'init'));
+    } else if (_popularController.bangumiList.isEmpty &&
+        !_popularController.isLoadingMore) {
+      unawaited(_popularController.queryBangumiByTag(type: 'init'));
+    }
+    if (_selectedIndex != 0) {
+      _selectDestination(0);
+    }
+  }
+
+  void _handleSearchSubmit(CinemaSearchSubmit submit) {
+    final params = <String, String>{};
+    if (submit.query.isNotEmpty) {
+      params['query'] = submit.query;
+    }
+    if (submit.hideWatched) {
+      params['hideWatched'] = '1';
+    }
+    if (submit.hideAbandoned) {
+      params['hideAbandoned'] = '1';
+    }
+    final uri = Uri(
+      path: '/search/',
+      queryParameters: params.isEmpty ? null : params,
+    );
+    context.pushNamed(uri.toString());
+  }
+
+  Future<String?> _handleImageSearch() async {
+    final result = await context.pushNamed('/search/image');
+    if (result is String && result.isNotEmpty) {
+      return result;
+    }
+    return null;
+  }
+
   void _handleSystemBack(BuildContext context) {
     if (_outletKey.currentState?.maybePop() ?? false) {
       _lastExitPromptAt = null;
@@ -98,124 +196,117 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
 
   @override
   Widget build(BuildContext context) {
+    final showShellCloseButton =
+        isDesktop() && !DesktopWindowConfig.showWindowButton;
     return RouteVisibility(
       isCovered: _isCovered,
-      child: PopScope(
-        canPop: false,
-        onPopInvokedWithResult: (didPop, _) {
-          if (!didPop) {
-            _handleSystemBack(context);
-          }
-        },
-        child: OrientationBuilder(
-          builder: (context, orientation) {
-            return orientation == Orientation.portrait
-                ? _bottomMenu(context, _selectedIndex)
-                : _sideMenu(context, _selectedIndex);
+      child: ShellWindowCloseScope(
+        handledByShell: showShellCloseButton,
+        child: PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop) {
+              _handleSystemBack(context);
+            }
           },
+          child: OrientationBuilder(
+            builder: (context, orientation) {
+              final isPortrait = orientation == Orientation.portrait;
+              return _buildShell(
+                context,
+                isPortrait: isPortrait,
+                showCloseButton: showShellCloseButton,
+              );
+            },
+          ),
         ),
       ),
     );
   }
 
-  Widget _outlet(BuildContext context, {BorderRadius? borderRadius}) {
-    Widget child = NotificationListener<NavigationNotification>(
-      // A non-poppable outlet must not override the shell's PopScope state.
-      onNotification: (notification) => !notification.canHandlePop,
-      child: RouterOutlet(key: _outletKey),
+  Widget _buildSearchBar() {
+    return CinemaSearchBar(
+      key: _searchBarKey,
+      historyRepository: _historyRepository,
+      onSubmit: _handleSearchSubmit,
+      onImageSearch: _handleImageSearch,
     );
-    if (borderRadius != null) {
-      child = ClipRRect(borderRadius: borderRadius, child: child);
+  }
+
+  Widget _buildTopBar({
+    required bool compactPortrait,
+    required bool showCloseButton,
+  }) {
+    return Observer(
+      builder: (_) => CinemaTopBar(
+        isHomeRoute: _selectedIndex == 0,
+        selectedCategoryTag: _popularController.currentTag,
+        tags: defaultAnimeTags,
+        onSelectHome: _selectHome,
+        onSelectCategoryTag: _selectCategoryTag,
+        searchBar: _buildSearchBar(),
+        compactPortrait: compactPortrait,
+        onHistoryTap: compactPortrait ? _handleHistoryTap : null,
+        showCloseButton: showCloseButton,
+        onCloseWindow: showCloseButton ? () => windowManager.close() : null,
+      ),
+    );
+  }
+
+  Widget _outlet(BuildContext context) {
+    return MediaQuery.removePadding(
+      context: context,
+      removeTop: true,
+      child: NotificationListener<NavigationNotification>(
+        // A non-poppable outlet must not override the shell's PopScope state.
+        onNotification: (notification) => !notification.canHandlePop,
+        child: RouterOutlet(key: _outletKey),
+      ),
+    );
+  }
+
+  Widget _buildShell(
+    BuildContext context, {
+    required bool isPortrait,
+    required bool showCloseButton,
+  }) {
+    final activeTab = activeCinemaNavTab(_selectedIndex);
+    final content = Column(
+      children: [
+        _buildTopBar(
+          compactPortrait: isPortrait,
+          showCloseButton: showCloseButton,
+        ),
+        Expanded(child: _outlet(context)),
+      ],
+    );
+
+    if (isPortrait) {
+      return CinemaBackdrop(
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          body: content,
+          bottomNavigationBar: CinemaBottomBar(
+            activeTab: activeTab,
+            onTabTap: _handleCinemaNavTap,
+          ),
+        ),
+      );
     }
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.primaryContainer,
-        borderRadius: borderRadius,
-      ),
-      child: child,
-    );
-  }
 
-  Widget _bottomMenu(BuildContext context, int selectedIndex) {
-    return Scaffold(
-      body: _outlet(context),
-      bottomNavigationBar: NavigationBar(
-        destinations: const <Widget>[
-          NavigationDestination(
-            selectedIcon: Icon(Icons.home),
-            icon: Icon(Icons.home_outlined),
-            label: '推荐',
-          ),
-          NavigationDestination(
-            selectedIcon: Icon(Icons.timeline),
-            icon: Icon(Icons.timeline_outlined),
-            label: '时间表',
-          ),
-          NavigationDestination(
-            selectedIcon: Icon(Icons.favorite),
-            icon: Icon(Icons.favorite_outlined),
-            label: '追番',
-          ),
-          NavigationDestination(
-            selectedIcon: Icon(Icons.settings),
-            icon: Icon(Icons.settings),
-            label: '我的',
-          ),
-        ],
-        selectedIndex: selectedIndex,
-        onDestinationSelected: _selectDestination,
-      ),
-    );
-  }
-
-  Widget _sideMenu(BuildContext context, int selectedIndex) {
-    const borderRadius = BorderRadius.only(
-      topLeft: Radius.circular(16),
-      bottomLeft: Radius.circular(16),
-    );
-    return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
-      body: Row(
-        children: [
-          EmbeddedNativeControlArea(
-            child: NavigationRail(
-              backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
-              groupAlignment: 1,
-              leading: FloatingActionButton(
-                elevation: 0,
-                heroTag: null,
-                onPressed: () => context.pushNamed('/search/'),
-                child: const Icon(Icons.search),
-              ),
-              labelType: NavigationRailLabelType.selected,
-              destinations: const <NavigationRailDestination>[
-                NavigationRailDestination(
-                  selectedIcon: Icon(Icons.home),
-                  icon: Icon(Icons.home_outlined),
-                  label: Text('推荐'),
-                ),
-                NavigationRailDestination(
-                  selectedIcon: Icon(Icons.timeline),
-                  icon: Icon(Icons.timeline_outlined),
-                  label: Text('时间表'),
-                ),
-                NavigationRailDestination(
-                  selectedIcon: Icon(Icons.favorite),
-                  icon: Icon(Icons.favorite_border),
-                  label: Text('追番'),
-                ),
-                NavigationRailDestination(
-                  selectedIcon: Icon(Icons.settings),
-                  icon: Icon(Icons.settings_outlined),
-                  label: Text('我的'),
-                ),
-              ],
-              selectedIndex: selectedIndex,
-              onDestinationSelected: _selectDestination,
+    return CinemaBackdrop(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: Row(
+          children: [
+            CinemaSideRail(
+              activeTab: activeTab,
+              onTabTap: _handleCinemaNavTap,
+              onHistoryTap: _handleHistoryTap,
             ),
-          ),
-          Expanded(child: _outlet(context, borderRadius: borderRadius)),
-        ],
+            Expanded(child: content),
+          ],
+        ),
       ),
     );
   }

@@ -226,8 +226,8 @@ class PopularFeaturedCard extends StatelessWidget {
                                 _pill(
                                   accent,
                                   onAccent,
-                                  '查看详情',
-                                  icon: Icons.info_outline_rounded,
+                                  '立即观看',
+                                  icon: Icons.play_arrow_rounded,
                                   glowColor: accent,
                                   r: 10,
                                   px: compact ? 16 : 20,
