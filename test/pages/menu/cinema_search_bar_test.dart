@@ -201,7 +201,9 @@ void main() {
           onSubmit: submits.add,
         );
 
-        final inputFinder = find.byType(TextField);
+        final inputFinder = find.byWidgetPredicate(
+          (w) => w is TextField && w.decoration?.hintText == '搜索番剧名称',
+        );
         await t.tap(inputFinder);
         await t.pumpAndSettle();
         expect(t.widget<TextField>(inputFinder).focusNode!.hasFocus, isTrue);
@@ -221,6 +223,59 @@ void main() {
         expect(submits.single.hideWatched, isFalse);
         expect(submits.single.hideAbandoned, isFalse);
         expect(submits.single.autoSubmit, isTrue);
+        expect(t.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'syncs edited or cleared search keyword when applying secondary filters',
+      (t) async {
+        final repo = _FakeSearchHistoryRepository(const []);
+        final submits = <CinemaSearchSubmit>[];
+
+        await _pumpSearchBar(
+          t,
+          repo: repo,
+          size: const Size(1280, 800),
+          onSubmit: submits.add,
+        );
+
+        final inputFinder = find.byWidgetPredicate(
+          (w) => w is TextField && w.decoration?.hintText == '搜索番剧名称',
+        );
+        await t.enterText(inputFinder, '葬送的芙莉莲');
+        await t.tap(inputFinder);
+        await t.pumpAndSettle();
+        await t.tap(find.text('按条件查找'));
+        await t.pumpAndSettle();
+
+        // Pick a tag, then edit the search keyword before applying.
+        await t.tap(find.text('题材标签'));
+        await t.pumpAndSettle();
+        await t.tap(find.widgetWithText(FilterChip, '日常'));
+        await t.pumpAndSettle();
+        await t.enterText(inputFinder, '孤独摇滚');
+        await t.pumpAndSettle();
+
+        await t.tap(find.text('查看结果'));
+        await t.pumpAndSettle();
+
+        expect(submits.length, 1);
+        expect(submits.last.query, '孤独摇滚 tag:日常');
+
+        // Reopen with existing query, clear input via clear button, then apply.
+        await t.tap(inputFinder);
+        await t.pumpAndSettle();
+        await t.tap(find.text('按条件查找'));
+        await t.pumpAndSettle();
+        await t.tap(find.byTooltip('清空输入'));
+        await t.pumpAndSettle();
+        await t.tap(find.text('查看结果'));
+        await t.pumpAndSettle();
+
+        expect(submits.length, 2);
+        expect(submits.last.query, 'tag:日常');
+        expect(submits.last.autoSubmit, isTrue);
         expect(t.takeException(), isNull);
       },
     );

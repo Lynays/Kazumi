@@ -334,11 +334,12 @@ class _CinemaSearchBarState extends State<CinemaSearchBar> {
 
   void _applySecondaryFilters(SearchFilterResult result) {
     var state = result.filterState;
-    if (!state.isIdSearch && state.keyword.isEmpty) {
-      final typedKeyword = SearchParser(_textController.text).parseKeywords();
-      if (typedKeyword.isNotEmpty) {
-        state = state.copyWith(keyword: typedKeyword);
-      }
+    final liveInput = SearchParser(_textController.text);
+    final liveId = liveInput.parseId() ?? '';
+    if (state.isIdSearch && liveId != state.id) {
+      state = state.copyWith(id: liveId, keyword: liveInput.parseKeywords());
+    } else if (!state.isIdSearch) {
+      state = state.copyWith(keyword: liveInput.parseKeywords());
     }
     final query = SearchParser.fromFilterState(state);
     _textController.value = TextEditingValue(
