@@ -81,22 +81,24 @@ void main() {
       t,
     ) async {
       final semantics = t.ensureSemantics();
-      addTearDown(semantics.dispose);
+      try {
+        final items = List.generate(4, (i) => _item(i + 2));
+        Object? pushedArgs;
+        await _pumpMosaic(
+          t,
+          items,
+          size: const Size(480, 260),
+          onInfo: (args) => pushedArgs = args,
+        );
 
-      final items = List.generate(4, (i) => _item(i + 2));
-      Object? pushedArgs;
-      await _pumpMosaic(
-        t,
-        items,
-        size: const Size(480, 260),
-        onInfo: (args) => pushedArgs = args,
-      );
-
-      expect(find.bySemanticsLabel(RegExp('热门第 3 名，番剧 3')), findsOneWidget);
-      await t.tap(find.byType(InkWell).at(1));
-      await t.pumpAndSettle();
-      expect(identical(pushedArgs, items[1]), isTrue);
-      expect(find.text('info-route'), findsOneWidget);
+        expect(find.bySemanticsLabel(RegExp('热门第 3 名，番剧 3')), findsOneWidget);
+        await t.tap(find.byType(InkWell).at(1));
+        await t.pumpAndSettle();
+        expect(identical(pushedArgs, items[1]), isTrue);
+        expect(find.text('info-route'), findsOneWidget);
+      } finally {
+        semantics.dispose();
+      }
     });
   });
 }
@@ -131,6 +133,7 @@ Future<void> _pumpMosaic(
   );
   await t.pumpWidget(
     ModularApp(
+      key: UniqueKey(),
       module: module,
       child: Builder(
         builder: (ctx) =>
@@ -138,6 +141,7 @@ Future<void> _pumpMosaic(
       ),
     ),
   );
+  await t.pumpAndSettle();
 }
 
 BangumiItem _item(int id) => BangumiItem(
