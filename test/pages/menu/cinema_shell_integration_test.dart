@@ -227,6 +227,7 @@ void main() {
         expect(lastSearchUri!.queryParameters['query'], 'tag:奇幻');
         expect(lastSearchUri!.queryParameters['hideWatched'], '1');
         expect(lastSearchUri!.queryParameters['hideAbandoned'], isNull);
+        expect(lastSearchUri!.queryParameters['submit'], '1');
 
         // Pop search route back to shell, then open history from top-left rail button.
         await t.tap(find.byTooltip('Back'));

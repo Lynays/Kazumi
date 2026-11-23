@@ -14,11 +14,13 @@ class CinemaSearchSubmit {
     required this.query,
     this.hideWatched = false,
     this.hideAbandoned = false,
+    this.autoSubmit = false,
   });
 
   final String query;
   final bool hideWatched;
   final bool hideAbandoned;
+  final bool autoSubmit;
 }
 
 @visibleForTesting
@@ -74,7 +76,7 @@ CinemaSearchOverlayLayout computeCinemaSearchOverlayLayout({
       .clamp(edgeMargin, maxTop)
       .toDouble();
   final availableBelow = math.max(
-    120.0,
+    0.0,
     viewport.height - primaryTop - edgeMargin - bottomInset,
   );
   final primaryMaxHeight = math.min(availableBelow, 440.0);
@@ -297,7 +299,12 @@ class _CinemaSearchBarState extends State<CinemaSearchBar> {
     if (!_primaryOpen) {
       _openPrimaryDropdown();
     }
-    setState(() => _secondaryOpen = !_secondaryOpen);
+    final nextOpen = !_secondaryOpen;
+    if (nextOpen) {
+      // Dismiss soft keyboard on narrow viewports so the filter panel has room.
+      _focusNode.unfocus();
+    }
+    setState(() => _secondaryOpen = nextOpen);
   }
 
   void _clearInput() {
@@ -344,6 +351,7 @@ class _CinemaSearchBarState extends State<CinemaSearchBar> {
         query: query,
         hideWatched: result.notShowWatched,
         hideAbandoned: result.notShowAbandoned,
+        autoSubmit: true,
       ),
     );
   }
@@ -439,10 +447,13 @@ class _CinemaSearchBarState extends State<CinemaSearchBar> {
                 children: [
                   ConstrainedBox(
                     constraints: BoxConstraints(
-                      maxHeight: math.max(
-                        96.0,
-                        math.min(184.0, layout.availableBelow * 0.34),
-                      ),
+                      maxHeight: math
+                          .min(
+                            184.0,
+                            math.max(68.0, layout.availableBelow * 0.34),
+                          )
+                          .clamp(0.0, math.max(0.0, layout.availableBelow - 8))
+                          .toDouble(),
                     ),
                     child: primaryPanel,
                   ),

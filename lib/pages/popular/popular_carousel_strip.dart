@@ -6,6 +6,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_modular/flutter_modular.dart';
 import 'package:kazumi/bean/card/network_img_layer.dart';
 import 'package:kazumi/modules/bangumi/bangumi_item.dart';
+import 'package:kazumi/pages/menu/cinema_tokens.dart';
 import 'package:kazumi/pages/popular/popular_floor_reflection.dart';
 
 /// Reusable horizontal carousel row for the Popular showcase.
@@ -101,10 +102,13 @@ class PopularCarouselStrip extends StatelessWidget {
                               (viewportWidth - sidePadding * 2 - gap * 9) / 10,
                             )
                             .clamp(compact ? 56.0 : 88.0, 220.0);
+                        final fadeColor = theme.brightness == Brightness.dark
+                            ? CinemaPalette.of(context).canvas
+                            : theme.scaffoldBackgroundColor;
                         return SizedBox(
                           width: viewportWidth,
                           child: _viewportFade(
-                            theme.scaffoldBackgroundColor,
+                            fadeColor,
                             ScrollConfiguration(
                               behavior: const _StripScrollBehavior(),
                               child: ListView.custom(

@@ -221,6 +221,62 @@ void main() {
         expect(t.takeException(), isNull);
       },
     );
+
+    testWidgets(
+      'SearchPage auto-submits empty default query when autoSubmit is true',
+      (t) async {
+        final controller = _RecordingSearchController();
+
+        await t.pumpWidget(
+          MaterialApp(
+            home: SearchPage(controller: controller, autoSubmit: true),
+          ),
+        );
+        await t.pump();
+
+        expect(controller.recordedQueries, ['']);
+        expect(controller.watchedAtSubmit, [false]);
+        expect(controller.abandonedAtSubmit, [false]);
+        expect(t.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'falls back to unified scroll without overflow in ultra-short popover height',
+      (t) async {
+        SearchFilterResult? applied;
+
+        await t.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Center(
+                child: SizedBox(
+                  width: 340,
+                  height: 120,
+                  child: SearchFilterPanel(
+                    showDragHandle: false,
+                    initialState: const SearchFilterState(),
+                    initialNotShowWatched: false,
+                    initialNotShowAbandoned: false,
+                    onApply: (result) => applied = result,
+                    onClose: () {},
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await t.pumpAndSettle();
+        expect(t.takeException(), isNull);
+
+        await t.ensureVisible(find.text('查看结果'));
+        await t.pumpAndSettle();
+        await t.tap(find.text('查看结果'));
+        await t.pumpAndSettle();
+        expect(applied, isNotNull);
+        expect(t.takeException(), isNull);
+      },
+    );
   });
 }
 

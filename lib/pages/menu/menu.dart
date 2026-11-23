@@ -155,6 +155,9 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
     if (submit.hideAbandoned) {
       params['hideAbandoned'] = '1';
     }
+    if (submit.autoSubmit) {
+      params['submit'] = '1';
+    }
     final uri = Uri(
       path: '/search/',
       queryParameters: params.isEmpty ? null : params,

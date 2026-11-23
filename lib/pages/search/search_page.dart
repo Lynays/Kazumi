@@ -27,12 +27,14 @@ class SearchPage extends StatefulWidget {
     this.initialQuery = '',
     this.initialNotShowWatched = false,
     this.initialNotShowAbandoned = false,
+    this.autoSubmit = false,
   });
 
   final SearchPageController controller;
   final String initialQuery;
   final bool initialNotShowWatched;
   final bool initialNotShowAbandoned;
+  final bool autoSubmit;
 
   @override
   State<SearchPage> createState() => _SearchPageState();
@@ -61,7 +63,8 @@ class _SearchPageState extends State<SearchPage> {
     if (widget.initialNotShowAbandoned) {
       _controller.setNotShowAbandonedBangumis(true);
     }
-    if (widget.initialQuery.isNotEmpty ||
+    if (widget.autoSubmit ||
+        widget.initialQuery.isNotEmpty ||
         widget.initialNotShowWatched ||
         widget.initialNotShowAbandoned) {
       WidgetsBinding.instance.addPostFrameCallback((_) {

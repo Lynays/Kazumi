@@ -175,10 +175,52 @@ void main() {
         expect(submits.single.query, 'tag:奇幻');
         expect(submits.single.hideWatched, isTrue);
         expect(submits.single.hideAbandoned, isFalse);
+        expect(submits.single.autoSubmit, isTrue);
         expect(
           find.byKey(const ValueKey('cinema-search-primary-panel')),
           findsNothing,
         );
+        expect(t.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'unfocuses input on secondary open, submits default heat with autoSubmit, and avoids overflow on ultra-short narrow screens',
+      (t) async {
+        final repo = _FakeSearchHistoryRepository([
+          SearchHistory('药屋少女的呢喃', 100),
+        ]);
+        final submits = <CinemaSearchSubmit>[];
+
+        await _pumpSearchBar(
+          t,
+          repo: repo,
+          size: const Size(390, 260),
+          alignment: Alignment.topCenter,
+          barWidth: 280,
+          onSubmit: submits.add,
+        );
+
+        final inputFinder = find.byType(TextField);
+        await t.tap(inputFinder);
+        await t.pumpAndSettle();
+        expect(t.widget<TextField>(inputFinder).focusNode!.hasFocus, isTrue);
+
+        await t.tap(find.text('按条件查找'));
+        await t.pumpAndSettle();
+        expect(t.widget<TextField>(inputFinder).focusNode!.hasFocus, isFalse);
+        expect(t.takeException(), isNull);
+
+        await t.ensureVisible(find.text('查看结果'));
+        await t.pumpAndSettle();
+        await t.tap(find.text('查看结果'));
+        await t.pumpAndSettle();
+
+        expect(submits.length, 1);
+        expect(submits.single.query, isEmpty);
+        expect(submits.single.hideWatched, isFalse);
+        expect(submits.single.hideAbandoned, isFalse);
+        expect(submits.single.autoSubmit, isTrue);
         expect(t.takeException(), isNull);
       },
     );

@@ -22,6 +22,7 @@ final searchModule = createModule(
               state.uri.queryParameters['hideWatched'] == '1',
           initialNotShowAbandoned:
               state.uri.queryParameters['hideAbandoned'] == '1',
+          autoSubmit: state.uri.queryParameters['submit'] == '1',
         ),
       )
       ..route(

@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kazumi/bean/card/network_img_layer.dart';
 import 'package:kazumi/modules/bangumi/bangumi_item.dart';
 import 'package:kazumi/modules/bangumi/bangumi_tag.dart';
+import 'package:kazumi/pages/menu/cinema_tokens.dart';
 import 'package:kazumi/pages/popular/popular_carousel_strip.dart';
 
 void main() {
@@ -123,6 +124,58 @@ void main() {
       expect(identical(pushedArgs, items.first), isTrue);
       expect(find.text('info-route'), findsOneWidget);
     });
+
+    testWidgets(
+      'uses cinema dark canvas for horizontal fade edges in dark mode',
+      (t) async {
+        final controller = ScrollController();
+        addTearDown(controller.dispose);
+        final items = List.generate(8, (i) => _item(i + 1));
+
+        await t.pumpWidget(
+          MaterialApp(
+            theme: ThemeData(brightness: Brightness.dark, useMaterial3: true),
+            home: Scaffold(
+              body: Center(
+                child: SizedBox(
+                  width: 500,
+                  child: PopularCarouselStrip(
+                    items: items,
+                    controller: controller,
+                    height: 180,
+                    onUserInteractionStart: () {},
+                    onUserInteractionEnd: () {},
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await t.pumpAndSettle();
+
+        final fadeColors = t
+            .widgetList<DecoratedBox>(find.byType(DecoratedBox))
+            .map((box) => box.decoration)
+            .whereType<BoxDecoration>()
+            .map((dec) => dec.gradient)
+            .whereType<LinearGradient>()
+            .where(
+              (grad) =>
+                  (grad.begin == Alignment.centerLeft &&
+                      grad.end == Alignment.centerRight) ||
+                  (grad.begin == Alignment.centerRight &&
+                      grad.end == Alignment.centerLeft),
+            )
+            .map((grad) => grad.colors.first)
+            .toList();
+
+        expect(fadeColors.length, 2);
+        for (final color in fadeColors) {
+          expect(color, CinemaTokens.darkCanvas.withValues(alpha: 0.64));
+        }
+        expect(t.takeException(), isNull);
+      },
+    );
   });
 }
 
