@@ -18,22 +18,26 @@ final searchModule = createModule(
         child: (context, state) => SearchPage(
           controller: context.read<SearchPageController>(),
           initialQuery: state.uri.queryParameters['query'] ?? '',
+          initialNotShowWatched:
+              state.uri.queryParameters['hideWatched'] == '1',
+          initialNotShowAbandoned:
+              state.uri.queryParameters['hideAbandoned'] == '1',
         ),
       )
       ..route(
         '/image',
         provide: _provideSearchController,
-        child: (context, state) => ImageSearchPage(
-          controller: context.read<SearchPageController>(),
-        ),
+        child: (context, state) =>
+            ImageSearchPage(controller: context.read<SearchPageController>()),
       )
       ..route(
         '/:tag',
         provide: _provideSearchController,
         child: (context, state) => SearchPage(
           controller: context.read<SearchPageController>(),
-          initialQuery: SearchParser.fromFilterState(SearchFilterState(
-              tags: [Uri.decodeComponent(state['tag'] ?? '')])),
+          initialQuery: SearchParser.fromFilterState(
+            SearchFilterState(tags: [Uri.decodeComponent(state['tag'] ?? '')]),
+          ),
         ),
       );
   },
