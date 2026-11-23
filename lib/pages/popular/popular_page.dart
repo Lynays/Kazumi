@@ -303,11 +303,9 @@ class _PopularPageState extends State<PopularPage> {
 
   Future<void> _selectTag(String selected) async {
     if (!mounted || selected == popularController.currentTag) return;
-    scrollController.animateTo(
-      0,
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeOut,
-    );
+    if (scrollController.hasClients) {
+      scrollController.jumpTo(0);
+    }
     popularController.setCurrentTag(selected);
     if (selected.isEmpty) {
       popularController.clearBangumiList();

@@ -77,24 +77,26 @@ void main() {
 
     testWidgets('exposes semantics and pushes /info/ on tap', (t) async {
       final semantics = t.ensureSemantics();
-      addTearDown(semantics.dispose);
+      try {
+        final item = _item(42, nameCn: '孤独摇滚！', score: 8.9);
+        Object? pushedArgs;
+        await _pumpCard(
+          t,
+          item,
+          size: const Size(600, 240),
+          onInfo: (args) => pushedArgs = args,
+        );
 
-      final item = _item(42, nameCn: '孤独摇滚！', score: 8.9);
-      Object? pushedArgs;
-      await _pumpCard(
-        t,
-        item,
-        size: const Size(600, 240),
-        onInfo: (args) => pushedArgs = args,
-      );
+        final node = t.getSemantics(find.byType(PopularFeaturedCard));
+        expect(node.label, contains('当前热门 TOP 1，孤独摇滚！'));
 
-      final node = t.getSemantics(find.byType(PopularFeaturedCard));
-      expect(node.label, contains('当前热门 TOP 1，孤独摇滚！'));
-
-      await t.tap(find.byType(InkWell));
-      await t.pumpAndSettle();
-      expect(identical(pushedArgs, item), isTrue);
-      expect(find.text('info-route'), findsOneWidget);
+        await t.tap(find.byType(InkWell));
+        await t.pumpAndSettle();
+        expect(identical(pushedArgs, item), isTrue);
+        expect(find.text('info-route'), findsOneWidget);
+      } finally {
+        semantics.dispose();
+      }
     });
   });
 }
@@ -126,6 +128,7 @@ Future<void> _pumpCard(
   );
   await tester.pumpWidget(
     ModularApp(
+      key: UniqueKey(),
       module: module,
       child: Builder(
         builder: (ctx) =>
@@ -133,6 +136,7 @@ Future<void> _pumpCard(
       ),
     ),
   );
+  await tester.pumpAndSettle();
 }
 
 BangumiItem _item(

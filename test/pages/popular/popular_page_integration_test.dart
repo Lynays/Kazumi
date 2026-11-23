@@ -154,6 +154,7 @@ void main() {
         await t.pump(const Duration(milliseconds: 300));
 
         expect(controller.currentTag, isEmpty);
+        expect(controller.scrollOffset, 0.0);
         expect(find.byType(PopularDashboard), findsOneWidget);
         expect(find.byType(SliverGrid), findsNothing);
         expect(find.byType(FloatingActionButton), findsNothing);

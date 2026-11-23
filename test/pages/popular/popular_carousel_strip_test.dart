@@ -164,6 +164,7 @@ Future<void> _pumpStrip(
   );
   await tester.pumpWidget(
     ModularApp(
+      key: UniqueKey(),
       module: module,
       child: Builder(
         builder: (ctx) =>
@@ -171,6 +172,7 @@ Future<void> _pumpStrip(
       ),
     ),
   );
+  await tester.pumpAndSettle();
 }
 
 BangumiItem _item(int id, {double score = 0}) => BangumiItem(
