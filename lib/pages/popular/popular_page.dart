@@ -5,7 +5,6 @@ import 'package:kazumi/bean/widget/bangumi_mirror_error_widget.dart';
 import 'package:kazumi/modules/bangumi/bangumi_item.dart';
 import 'package:kazumi/pages/popular/popular_controller.dart';
 import 'package:kazumi/pages/popular/popular_dashboard.dart';
-import 'package:kazumi/pages/popular/popular_sections.dart';
 import 'package:kazumi/services/logging/logger.dart';
 import 'package:kazumi/utils/constants.dart';
 import 'package:mobx/mobx.dart';
@@ -78,6 +77,7 @@ class _PopularPageState extends State<PopularPage> {
       backgroundColor: isDark ? Colors.transparent : null,
       body: LayoutBuilder(
         builder: (context, constraints) {
+          final viewportWidth = constraints.maxWidth;
           final viewportHeight = constraints.maxHeight - _progressHeight;
           return CustomScrollView(
             controller: scrollController,
@@ -102,7 +102,13 @@ class _PopularPageState extends State<PopularPage> {
                   StyleString.cardSpace,
                   0,
                 ),
-                sliver: Observer(builder: (_) => _buildResults(viewportHeight)),
+                sliver: Observer(
+                  builder: (observerContext) => _buildResults(
+                    observerContext,
+                    viewportWidth,
+                    viewportHeight,
+                  ),
+                ),
               ),
             ],
           );
@@ -126,7 +132,11 @@ class _PopularPageState extends State<PopularPage> {
     );
   }
 
-  Widget _buildResults(double viewportHeight) {
+  Widget _buildResults(
+    BuildContext observerContext,
+    double viewportWidth,
+    double viewportHeight,
+  ) {
     if (popularController.isTimeOut) {
       return SliverToBoxAdapter(
         child: SizedBox(
@@ -149,22 +159,33 @@ class _PopularPageState extends State<PopularPage> {
       );
     }
     if (popularController.currentTag.isNotEmpty) {
-      return contentGrid(popularController.bangumiList);
+      return contentGrid(
+        observerContext,
+        popularController.bangumiList,
+        viewportWidth,
+      );
     }
     return SliverToBoxAdapter(
       child: PopularDashboard(
-        sections: splitPopularItems(popularController.trendList),
+        sections: popularController.popularSections,
         viewportHeight: viewportHeight,
       ),
     );
   }
 
-  Widget contentGrid(List<BangumiItem> bangumiList) {
+  Widget contentGrid(
+    BuildContext gridContext,
+    List<BangumiItem> bangumiList,
+    double viewportWidth,
+  ) {
+    final availableWidth = viewportWidth.isFinite && viewportWidth > 0
+        ? viewportWidth
+        : 0.0;
     int crossCount = 3;
-    if (MediaQuery.sizeOf(context).width > LayoutBreakpoint.compact['width']!) {
+    if (availableWidth > LayoutBreakpoint.compact['width']!) {
       crossCount = 5;
     }
-    if (MediaQuery.sizeOf(context).width > LayoutBreakpoint.medium['width']!) {
+    if (availableWidth > LayoutBreakpoint.medium['width']!) {
       crossCount = 6;
     }
     return SliverPadding(
@@ -178,8 +199,8 @@ class _PopularPageState extends State<PopularPage> {
           // 列数
           crossAxisCount: crossCount,
           mainAxisExtent:
-              MediaQuery.of(context).size.width / crossCount / 0.65 +
-              MediaQuery.textScalerOf(context).scale(32.0),
+              availableWidth / crossCount / 0.65 +
+              MediaQuery.textScalerOf(gridContext).scale(32.0),
         ),
         delegate: SliverChildBuilderDelegate((BuildContext context, int index) {
           return bangumiList.isNotEmpty

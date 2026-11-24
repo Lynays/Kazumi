@@ -88,15 +88,11 @@ class BangumiContent extends StatelessWidget {
                 letterSpacing: 0.3,
               );
           final textScaler = ts.clamp(maxScaleFactor: 1.1);
-          final painter = TextPainter(
-            text: TextSpan(text: bangumiItem.nameCn, style: style),
-            textDirection: Directionality.of(context),
-            textScaler: textScaler,
-          );
-          final lines = (constraints.maxHeight / painter.preferredLineHeight)
-              .floor()
-              .clamp(1, 3);
-          painter.dispose();
+          final lineHeight =
+              textScaler.scale(style.fontSize ?? 14.0) * (style.height ?? 1.0);
+          final lines = lineHeight > 0
+              ? (constraints.maxHeight / lineHeight).floor().clamp(1, 3)
+              : 1;
           return Text(
             bangumiItem.nameCn,
             textAlign: TextAlign.start,

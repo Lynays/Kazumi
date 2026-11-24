@@ -345,6 +345,15 @@ class GStorage {
     await _setting.put(key.name, value);
   }
 
+  static Future<void> putSettings(
+    Map<SettingKey<Object?>, Object?> values,
+  ) async {
+    if (values.isEmpty) return;
+    await _setting.putAll({
+      for (final entry in values.entries) entry.key.name: entry.value,
+    });
+  }
+
   static Stream<void> watchSettings(Iterable<SettingKey<Object?>> keys) {
     final names = keys.map((key) => key.name).toSet();
     return _setting.watch().where((event) => names.contains(event.key)).map((_) {});

@@ -141,6 +141,7 @@ class _SearchResultCard extends StatelessWidget {
                     src: item.images['large'] ?? item.images['common'] ?? '',
                     width: constraints.maxWidth,
                     height: constraints.maxHeight,
+                    borderRadius: BorderRadius.zero,
                   ),
                 ),
               ),
