@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:kazumi/bean/settings/visual_effects_config.dart';
+import 'package:kazumi/bean/widget/cached_procedural_texture.dart';
 import 'package:kazumi/modules/bangumi/bangumi_item.dart';
 import 'package:kazumi/pages/popular/popular_featured_card.dart';
 import 'package:kazumi/pages/popular/popular_rank_mosaic.dart';
@@ -136,17 +138,23 @@ class PopularShowcaseWithCarousels extends StatelessWidget {
                     PopularRankMosaic.minReflectionHeight
             ? 0.0
             : mirrorOverhang;
+        final effects = VisualEffectsConfig.of(context);
+        final floorLightScale = effects.floorLightScale;
         return Stack(
           clipBehavior: Clip.none,
           children: [
-            if (Theme.of(context).brightness == Brightness.dark &&
+            if (floorLightScale > 0 &&
+                Theme.of(context).brightness == Brightness.dark &&
                 mosaic.isNotEmpty &&
                 showcaseHeight >= _ShowcaseFloor.aboveCardBottom)
               Positioned(
                 top: showcaseHeight - _ShowcaseFloor.aboveCardBottom,
                 left: 0,
                 right: 0,
-                child: const _ShowcaseFloor(),
+                child: _ShowcaseFloor(
+                  percent: effects.floorLightPercent,
+                  scale: floorLightScale,
+                ),
               ),
             Padding(
               padding: EdgeInsets.only(top: showcaseHeight + gap),
@@ -172,17 +180,19 @@ class PopularShowcaseWithCarousels extends StatelessWidget {
 }
 
 class _ShowcaseFloor extends StatelessWidget {
-  const _ShowcaseFloor();
+  const _ShowcaseFloor({required this.percent, required this.scale});
 
   static const double aboveCardBottom = 56;
+  final int percent;
+  final double scale;
 
   @override
   Widget build(BuildContext context) {
-    return const SizedBox(
+    return SizedBox(
       height: 120,
       child: IgnorePointer(
-        child: RepaintBoundary(
-          child: CustomPaint(painter: _ShowcaseFloorShade()),
+        child: CustomPaint(
+          painter: _ShowcaseFloorShade(percent: percent, scale: scale),
         ),
       ),
     );
@@ -190,11 +200,37 @@ class _ShowcaseFloor extends StatelessWidget {
 }
 
 class _ShowcaseFloorShade extends CustomPainter {
-  const _ShowcaseFloorShade();
+  const _ShowcaseFloorShade({required this.percent, required this.scale});
+
+  final int percent;
+  final double scale;
+
+  static final CachedProceduralTexture _texture = CachedProceduralTexture(
+    width: 320,
+    height: 60,
+  );
+  static final Paint _blitPaint = Paint()..filterQuality = FilterQuality.low;
 
   @override
   void paint(Canvas canvas, Size size) {
-    const edgeInset = 12.0;
+    if (size.isEmpty) return;
+    final image = _texture.resolve(
+      percent,
+      (offscreen, textureSize) => _paintFloorShade(offscreen, textureSize, scale),
+    );
+    canvas.drawImageRect(
+      image,
+      _texture.sourceRect,
+      Offset.zero & size,
+      _blitPaint,
+    );
+  }
+
+  static void _paintFloorShade(Canvas canvas, Size size, double scale) {
+    Color scaled(Color color) =>
+        color.withValues(alpha: (color.a * scale).clamp(0.0, 1.0));
+
+    const edgeInset = 4.0;
     final w = size.width + edgeInset * 2;
     final h = size.height;
     canvas.save();
@@ -208,23 +244,27 @@ class _ShowcaseFloorShade extends CustomPainter {
     canvas.drawOval(
       shade,
       Paint()
-        ..shader = const LinearGradient(
+        ..shader = LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0x00020409), Color(0x32020408), Color(0x00020409)],
-          stops: [0, 0.56, 1],
+          colors: [
+            const Color(0x00020409),
+            scaled(const Color(0x32020408)),
+            const Color(0x00020409),
+          ],
+          stops: const [0, 0.56, 1],
         ).createShader(shade)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 22),
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 11),
     );
     final reflectedLight = Paint()
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 15);
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7.5);
     canvas.drawOval(
       Rect.fromCenter(
         center: Offset(w * 0.16, h * 0.58),
         width: w * 0.20,
         height: h * 0.30,
       ),
-      reflectedLight..color = const Color(0x6A8E445E),
+      reflectedLight..color = scaled(const Color(0x6A8E445E)),
     );
     canvas.drawOval(
       Rect.fromCenter(
@@ -232,7 +272,7 @@ class _ShowcaseFloorShade extends CustomPainter {
         width: w * 0.15,
         height: h * 0.30,
       ),
-      reflectedLight..color = const Color(0x796B5B89),
+      reflectedLight..color = scaled(const Color(0x796B5B89)),
     );
     canvas.drawOval(
       Rect.fromCenter(
@@ -240,7 +280,7 @@ class _ShowcaseFloorShade extends CustomPainter {
         width: w * 0.12,
         height: h * 0.15,
       ),
-      reflectedLight..color = const Color(0x555E536C),
+      reflectedLight..color = scaled(const Color(0x555E536C)),
     );
     canvas.drawOval(
       Rect.fromCenter(
@@ -249,14 +289,15 @@ class _ShowcaseFloorShade extends CustomPainter {
         height: h * 0.075,
       ),
       Paint()
-        ..color = const Color(0x658C334D)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
+        ..color = scaled(const Color(0x658C334D))
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5),
     );
     canvas.restore();
   }
 
   @override
-  bool shouldRepaint(_ShowcaseFloorShade oldDelegate) => false;
+  bool shouldRepaint(_ShowcaseFloorShade oldDelegate) =>
+      oldDelegate.percent != percent;
 }
 
 class _ShowcasePlaceholder extends StatelessWidget {

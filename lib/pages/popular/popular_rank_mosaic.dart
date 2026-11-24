@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_modular/flutter_modular.dart';
 import 'package:kazumi/bean/card/network_img_layer.dart';
+import 'package:kazumi/bean/settings/visual_effects_config.dart';
 import 'package:kazumi/modules/bangumi/bangumi_item.dart';
 import 'package:kazumi/pages/popular/popular_floor_reflection.dart';
 import 'package:kazumi/pages/popular/popular_mosaic_geometry.dart';
@@ -208,6 +209,8 @@ class _MosaicTile extends StatelessWidget {
     required this.onHover,
   });
 
+  static final RegExp _whitespacePattern = RegExp(r'\s+');
+
   final BangumiItem item;
   final int rank;
   final Size size;
@@ -218,6 +221,7 @@ class _MosaicTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardEffectsScale = VisualEffectsConfig.of(context).cardEffectsScale;
     final cn = item.nameCn.trim();
     final raw = item.name.trim();
     final title = cn.isNotEmpty ? cn : (raw.isNotEmpty ? raw : '未知番剧');
@@ -228,7 +232,7 @@ class _MosaicTile extends StatelessWidget {
     final tier = rank == 2 ? 0 : (rank <= 6 ? 1 : 2);
     final leadCaption = tier == 0 && size.width >= 120 && size.height >= 120;
     final summary = leadCaption
-        ? item.summary.replaceAll(RegExp(r'\s+'), ' ').trim()
+        ? item.summary.replaceAll(_whitespacePattern, ' ').trim()
         : '';
     final rankFontSize = tiny ? 10.0 : (tier == 2 ? 12.0 : 16.0);
     final titleFontSize = leadCaption
@@ -278,7 +282,12 @@ class _MosaicTile extends StatelessWidget {
             child: DecoratedBox(
               decoration: BoxDecoration(
                 borderRadius: radius,
-                boxShadow: _tileShadows(isDark, hovered, tier),
+                boxShadow: _tileShadows(
+                  isDark,
+                  hovered,
+                  tier,
+                  cardEffectsScale,
+                ),
               ),
               child: ClipRRect(
                 borderRadius: radius,
@@ -288,16 +297,15 @@ class _MosaicTile extends StatelessWidget {
                     borderRadius: radius,
                     hoverColor: Colors.transparent,
                     onTap: () => context.pushNamed('/info/', arguments: item),
-                    child: RepaintBoundary(
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          NetworkImgLayer(
-                            src: cover,
-                            width: size.width,
-                            height: size.height,
-                            borderRadius: radius,
-                          ),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        NetworkImgLayer(
+                          src: cover,
+                          width: size.width,
+                          height: size.height,
+                          borderRadius: BorderRadius.zero,
+                        ),
                           if (dimAlpha > 0)
                             IgnorePointer(
                               child: AnimatedOpacity(
@@ -401,13 +409,18 @@ class _MosaicTile extends StatelessWidget {
                               ),
                             ),
                           ),
+                        if (cardEffectsScale > 0)
                           IgnorePointer(
                             child: DecoratedBox(
-                              decoration: _tileSheen(isDark, hovered, tier),
+                              decoration: _tileSheen(
+                                isDark,
+                                hovered,
+                                tier,
+                                cardEffectsScale,
+                              ),
                             ),
                           ),
-                        ],
-                      ),
+                      ],
                     ),
                   ),
                 ),
@@ -425,7 +438,13 @@ String _mosaicCover(BangumiItem item) =>
         .map((key) => item.images[key]?.trim() ?? '')
         .firstWhere((url) => url.isNotEmpty, orElse: () => '');
 
-List<BoxShadow> _tileShadows(bool isDark, bool hovered, int tier) {
+List<BoxShadow>? _tileShadows(
+  bool isDark,
+  bool hovered,
+  int tier,
+  double scale,
+) {
+  if (scale <= 0) return null;
   final (blur, y, a) = hovered
       ? (26.0, 12.0, isDark ? 0.82 : 0.28)
       : switch (tier) {
@@ -435,7 +454,7 @@ List<BoxShadow> _tileShadows(bool isDark, bool hovered, int tier) {
         };
   return [
     BoxShadow(
-      color: Colors.black.withValues(alpha: a),
+      color: Colors.black.withValues(alpha: (a * scale).clamp(0.0, 1.0)),
       blurRadius: blur,
       spreadRadius: -2,
       offset: Offset(0, y),
@@ -443,8 +462,13 @@ List<BoxShadow> _tileShadows(bool isDark, bool hovered, int tier) {
     if (hovered || tier == 0)
       BoxShadow(
         color: isDark
-            ? Color.fromRGBO(179, 130, 255, hovered ? 0.26 : 0.20)
-            : Colors.black.withValues(alpha: 0.12),
+            ? Color.fromRGBO(
+                179,
+                130,
+                255,
+                ((hovered ? 0.26 : 0.20) * scale).clamp(0.0, 1.0),
+              )
+            : Colors.black.withValues(alpha: (0.12 * scale).clamp(0.0, 1.0)),
         blurRadius: 16,
         spreadRadius: -4,
         offset: const Offset(0, -1),
@@ -452,7 +476,7 @@ List<BoxShadow> _tileShadows(bool isDark, bool hovered, int tier) {
   ];
 }
 
-BoxDecoration _tileSheen(bool isDark, bool hovered, int tier) {
+BoxDecoration _tileSheen(bool isDark, bool hovered, int tier, double scale) {
   final g = hovered
       ? (isDark ? 0.26 : 0.36)
       : (tier == 0 ? (isDark ? 0.14 : 0.26) : (isDark ? 0.06 : 0.16));
@@ -460,9 +484,12 @@ BoxDecoration _tileSheen(bool isDark, bool hovered, int tier) {
     borderRadius: BorderRadius.circular(14),
     border: Border.all(
       color: isDark && tier == 0
-          ? const Color(0xFFD69CF8).withValues(alpha: hovered ? 0.72 : 0.38)
+          ? const Color(0xFFD69CF8).withValues(
+              alpha: ((hovered ? 0.72 : 0.38) * scale).clamp(0.0, 1.0),
+            )
           : Colors.white.withValues(
-              alpha: isDark ? (hovered ? 0.32 : 0.11) : 0.28,
+              alpha: ((isDark ? (hovered ? 0.32 : 0.11) : 0.28) * scale)
+                  .clamp(0.0, 1.0),
             ),
       width: 0.85,
     ),
@@ -470,10 +497,12 @@ BoxDecoration _tileSheen(bool isDark, bool hovered, int tier) {
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
       colors: [
-        Colors.white.withValues(alpha: g),
+        Colors.white.withValues(alpha: (g * scale).clamp(0.0, 1.0)),
         Colors.transparent,
         Colors.transparent,
-        const Color(0x52020306),
+        const Color(0xFF020306).withValues(
+          alpha: ((0x52 / 255.0) * scale).clamp(0.0, 1.0),
+        ),
       ],
       stops: const [0.0, 0.22, 0.72, 1.0],
     ),

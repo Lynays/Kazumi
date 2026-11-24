@@ -149,18 +149,20 @@ class CinemaTopBar extends StatelessWidget {
     );
   }
 
+  static final Expando<ThemeData> _darkMenuThemeCache = Expando<ThemeData>();
+
   Widget _buildCategoryButton(BuildContext context) {
     final palette = CinemaPalette.of(context);
     final theme = Theme.of(context);
     final label = _categoryActive ? '分类 · $selectedCategoryTag' : '分类';
     final menuTheme = palette.isCinemaDark
-        ? theme.copyWith(
+        ? (_darkMenuThemeCache[theme] ??= theme.copyWith(
             colorScheme: theme.colorScheme.copyWith(
               primary: palette.accent,
               surfaceContainer: palette.panelSurface,
               onSurface: palette.textPrimary,
             ),
-          )
+          ))
         : theme;
 
     return Theme(

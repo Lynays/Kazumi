@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:kazumi/bean/settings/visual_effects_config.dart';
 import 'package:kazumi/utils/constants.dart';
 
 class ThemeProvider extends ChangeNotifier {
@@ -8,6 +9,8 @@ class ThemeProvider extends ChangeNotifier {
   late ThemeData light;
   late ThemeData dark;
   String? currentFontFamily = customAppFontFamily;
+  final ValueNotifier<VisualEffectsConfig> visualEffects =
+      ValueNotifier<VisualEffectsConfig>(VisualEffectsConfig.defaults);
 
   /// Returns true if the effective theme is dark mode.
   /// Automatically gets platform brightness when themeMode is ThemeMode.system.
@@ -38,5 +41,15 @@ class ThemeProvider extends ChangeNotifier {
   void setFontFamily(bool useSystemFont, {bool notify = true}) {
     currentFontFamily = useSystemFont ? null : customAppFontFamily;
     if (notify) notifyListeners();
+  }
+
+  void setVisualEffects(VisualEffectsConfig config) {
+    visualEffects.value = config;
+  }
+
+  @override
+  void dispose() {
+    visualEffects.dispose();
+    super.dispose();
   }
 }

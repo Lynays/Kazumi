@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:kazumi/modules/bangumi/bangumi_item.dart';
+import 'package:kazumi/pages/menu/route_visibility.dart';
 import 'package:kazumi/pages/popular/popular_carousel_floor.dart';
 import 'package:kazumi/pages/popular/popular_carousel_strip.dart';
 
@@ -22,6 +24,7 @@ class _PopularCarouselRegionState extends State<PopularCarouselRegion>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   static const int _rowCount = 3;
   static const double _gap = 12.0;
+  static const Duration _resizePauseDuration = Duration(milliseconds: 150);
   static const List<double> _weights = [0.352, 0.308, 0.340];
   static const List<double> _speeds = [24.0, 15.5, 31.0];
   static const List<double> _initialOffsets = [0.0, 56.0, 118.0];
@@ -38,13 +41,23 @@ class _PopularCarouselRegionState extends State<PopularCarouselRegion>
 
   Duration? _lastTick;
   ScrollPosition? _verticalPosition;
+  ui.FlutterView? _view;
+  Size? _lastPhysicalSize;
+  Timer? _resizeResumeTimer;
   bool _viewportUpdatePending = false;
   bool _appResumed = true;
   bool _tickerEnabled = true;
   bool _reduceMotion = false;
+  bool _isCovered = false;
+  bool _isResizing = false;
   bool _disposed = false;
 
-  bool get _canAutoScroll => _appResumed && _tickerEnabled && !_reduceMotion;
+  bool get _canAutoScroll =>
+      _appResumed &&
+      _tickerEnabled &&
+      !_reduceMotion &&
+      !_isCovered &&
+      !_isResizing;
 
   @override
   void initState() {
@@ -67,18 +80,50 @@ class _PopularCarouselRegionState extends State<PopularCarouselRegion>
     super.didChangeDependencies();
     _tickerEnabled = TickerMode.valuesOf(context).enabled;
     _reduceMotion = MediaQuery.disableAnimationsOf(context);
+    _isCovered = RouteVisibility.isCoveredOf(context);
+    _view = View.maybeOf(context);
+    _lastPhysicalSize = _view?.physicalSize;
     final position = Scrollable.maybeOf(context, axis: Axis.vertical)?.position;
     if (_verticalPosition != position) {
       _verticalPosition?.removeListener(_scheduleViewportUpdate);
       _verticalPosition = position;
       position?.addListener(_scheduleViewportUpdate);
     }
-    _scheduleViewportUpdate();
+    if (_isCovered || !_tickerEnabled) {
+      _resizeResumeTimer?.cancel();
+      _resizeResumeTimer = null;
+      _isResizing = false;
+    } else {
+      _scheduleViewportUpdate();
+    }
     _syncTicker(notify: false);
   }
 
   @override
-  void didChangeMetrics() => _scheduleViewportUpdate();
+  void didChangeMetrics() {
+    if (_disposed || !_tickerEnabled || _isCovered) return;
+    final currentPhysicalSize = _view?.physicalSize;
+    final sizeChanged =
+        currentPhysicalSize == null || currentPhysicalSize != _lastPhysicalSize;
+    if (sizeChanged) {
+      _lastPhysicalSize = currentPhysicalSize;
+      final wasResizing = _isResizing;
+      _isResizing = true;
+      if (!wasResizing) {
+        _syncTicker();
+      }
+      _resizeResumeTimer?.cancel();
+      _resizeResumeTimer = Timer(_resizePauseDuration, () {
+        _resizeResumeTimer = null;
+        if (!mounted || _disposed) return;
+        _isResizing = false;
+        if (!_tickerEnabled || _isCovered) return;
+        _scheduleViewportUpdate();
+      });
+      return;
+    }
+    _scheduleViewportUpdate();
+  }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -89,6 +134,8 @@ class _PopularCarouselRegionState extends State<PopularCarouselRegion>
   @override
   void dispose() {
     _disposed = true;
+    _resizeResumeTimer?.cancel();
+    _resizeResumeTimer = null;
     WidgetsBinding.instance.removeObserver(this);
     _verticalPosition?.removeListener(_scheduleViewportUpdate);
     _ticker.dispose();
@@ -118,11 +165,23 @@ class _PopularCarouselRegionState extends State<PopularCarouselRegion>
   }
 
   void _scheduleViewportUpdate() {
-    if (_viewportUpdatePending || _disposed) return;
+    if (_viewportUpdatePending ||
+        _disposed ||
+        !_tickerEnabled ||
+        _isCovered ||
+        _isResizing) {
+      return;
+    }
     _viewportUpdatePending = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _viewportUpdatePending = false;
-      if (!mounted || _disposed) return;
+      if (!mounted ||
+          _disposed ||
+          !_tickerEnabled ||
+          _isCovered ||
+          _isResizing) {
+        return;
+      }
       for (var i = 0; i < _rowCount; i++) {
         final row = _rowKeys[i].currentContext?.findRenderObject();
         final visible = row is RenderBox && row.hasSize && _isVisible(row);
@@ -264,7 +323,6 @@ class _PopularCarouselRegionState extends State<PopularCarouselRegion>
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (_, c) {
-        _scheduleViewportUpdate();
         final totalH =
             c.hasBoundedHeight && c.maxHeight.isFinite && c.maxHeight > 0
             ? c.maxHeight

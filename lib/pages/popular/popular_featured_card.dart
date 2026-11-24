@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_modular/flutter_modular.dart';
 import 'package:kazumi/bean/card/network_img_layer.dart';
+import 'package:kazumi/bean/settings/visual_effects_config.dart';
 import 'package:kazumi/modules/bangumi/bangumi_item.dart';
+import 'package:kazumi/pages/menu/cinema_tokens.dart';
 
 /// Netflix-style hero showcase card for the current popular TOP 1 anime.
 class PopularFeaturedCard extends StatelessWidget {
   const PopularFeaturedCard({super.key, required this.item});
+
+  static final RegExp _whitespacePattern = RegExp(r'\s+');
 
   final BangumiItem item;
 
@@ -29,11 +33,15 @@ class PopularFeaturedCard extends StatelessWidget {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
+    final cardEffectsScale = VisualEffectsConfig.of(context).cardEffectsScale;
+    final edgeFadeColor = isDark
+        ? CinemaTokens.darkCanvas
+        : theme.scaffoldBackgroundColor;
     final accent = isDark ? const Color(0xFFE4152A) : colors.primary;
     final onAccent = isDark ? Colors.white : colors.onPrimary;
     final title = _title;
     final cover = _cover;
-    final summary = item.summary.replaceAll(RegExp(r'\s+'), ' ').trim();
+    final summary = item.summary.replaceAll(_whitespacePattern, ' ').trim();
     final rawTitle = item.name.trim();
     final genres = item.tags.take(3).map((tag) => tag.name).join('  ·  ');
     const cardRadius = BorderRadius.all(Radius.circular(14));
@@ -82,47 +90,68 @@ class PopularFeaturedCard extends StatelessWidget {
             return Stack(
               fit: StackFit.expand,
               children: [
-                RepaintBoundary(
-                  child: _heroEdgeMask(
-                    Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        NetworkImgLayer(
-                          src: cover,
-                          width: w,
-                          height: h,
-                          borderRadius: cardRadius,
-                        ),
-                        const DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.centerLeft,
-                              end: Alignment.centerRight,
-                              colors: [
-                                Color(0xF008080C),
-                                Color(0xAE08080C),
-                                Color(0x0608080C),
-                                Color(0x34090B10),
-                              ],
-                              stops: [0.0, 0.30, 0.59, 1.0],
-                            ),
-                          ),
-                        ),
-                        const DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.bottomCenter,
-                              end: Alignment.topCenter,
-                              colors: [
-                                Color(0x96090B10),
-                                Color(0x40090B10),
-                                Color(0x00090B10),
-                              ],
-                              stops: [0.0, 0.14, 0.34],
-                            ),
-                          ),
-                        ),
+                NetworkImgLayer(
+                  src: cover,
+                  width: w,
+                  height: h,
+                  borderRadius: BorderRadius.zero,
+                ),
+                const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: [
+                        Color(0xF008080C),
+                        Color(0xAE08080C),
+                        Color(0x0608080C),
+                        Color(0x34090B10),
                       ],
+                      stops: [0.0, 0.30, 0.59, 1.0],
+                    ),
+                  ),
+                ),
+                const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.bottomCenter,
+                      end: Alignment.topCenter,
+                      colors: [
+                        Color(0x96090B10),
+                        Color(0x40090B10),
+                        Color(0x00090B10),
+                      ],
+                      stops: [0.0, 0.14, 0.34],
+                    ),
+                  ),
+                ),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: [
+                        edgeFadeColor,
+                        edgeFadeColor.withValues(alpha: 0.0),
+                        edgeFadeColor.withValues(alpha: 0.0),
+                        edgeFadeColor,
+                      ],
+                      stops: const [0.0, 0.03, 0.96, 1.0],
+                    ),
+                  ),
+                ),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        edgeFadeColor,
+                        edgeFadeColor.withValues(alpha: 0.0),
+                        edgeFadeColor.withValues(alpha: 0.0),
+                        edgeFadeColor,
+                      ],
+                      stops: const [0.0, 0.05, 0.89, 1.0],
                     ),
                   ),
                 ),
@@ -228,7 +257,10 @@ class PopularFeaturedCard extends StatelessWidget {
                                   onAccent,
                                   '立即观看',
                                   icon: Icons.play_arrow_rounded,
-                                  glowColor: accent,
+                                  glowColor: cardEffectsScale > 0
+                                      ? accent
+                                      : null,
+                                  glowScale: cardEffectsScale,
                                   r: 10,
                                   px: compact ? 16 : 20,
                                   py: tight ? 5 : (compact ? 7 : 10),
@@ -264,6 +296,7 @@ class PopularFeaturedCard extends StatelessWidget {
     IconData? icon,
     Color? iconColor,
     Color? glowColor,
+    double glowScale = 1.0,
     double r = 6,
     double px = 8,
     double py = 3,
@@ -279,11 +312,13 @@ class PopularFeaturedCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(r),
-        boxShadow: glowColor == null
+        boxShadow: glowColor == null || glowScale <= 0
             ? null
             : [
                 BoxShadow(
-                  color: glowColor.withValues(alpha: 0.48),
+                  color: glowColor.withValues(
+                    alpha: (0.48 * glowScale).clamp(0.0, 1.0),
+                  ),
                   blurRadius: 18,
                   offset: const Offset(0, 6),
                 ),
@@ -301,34 +336,4 @@ class PopularFeaturedCard extends StatelessWidget {
             ),
     );
   }
-}
-
-Widget _heroEdgeMask(Widget child) {
-  Widget fade(Alignment a, Alignment b, List<double> stops, Widget inner) =>
-      ShaderMask(
-        blendMode: BlendMode.dstIn,
-        shaderCallback: (r) => LinearGradient(
-          begin: a,
-          end: b,
-          colors: const [
-            Colors.transparent,
-            Colors.white,
-            Colors.white,
-            Colors.transparent,
-          ],
-          stops: stops,
-        ).createShader(r),
-        child: inner,
-      );
-  return fade(
-    Alignment.centerLeft,
-    Alignment.centerRight,
-    const [0.0, 0.03, 0.96, 1.0],
-    fade(Alignment.topCenter, Alignment.bottomCenter, const [
-      0.0,
-      0.05,
-      0.89,
-      1.0,
-    ], child),
-  );
 }

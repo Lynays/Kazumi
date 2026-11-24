@@ -61,7 +61,7 @@ void main() {
   });
 
   group('CinemaBackdrop', () {
-    testWidgets('paints cached RepaintBoundary CustomPaint in dark mode', (
+    testWidgets('paints pre-rasterized GPU texture CustomPaint in dark mode', (
       t,
     ) async {
       await t.pumpWidget(
@@ -83,7 +83,7 @@ void main() {
           of: backdropFinder,
           matching: find.byType(RepaintBoundary),
         ),
-        findsOneWidget,
+        findsNothing,
       );
 
       final customPaint = t.widget<CustomPaint>(customPaintFinder);

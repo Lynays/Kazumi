@@ -6,6 +6,7 @@ import 'package:flutter_mobx/flutter_mobx.dart';
 import 'package:flutter_modular/flutter_modular.dart';
 import 'package:kazumi/bean/appbar/sys_app_bar.dart';
 import 'package:kazumi/bean/dialog/dialog_helper.dart';
+import 'package:kazumi/bean/widget/media_query_size_selector.dart';
 import 'package:kazumi/navigation.dart';
 import 'package:kazumi/pages/menu/cinema_backdrop.dart';
 import 'package:kazumi/pages/menu/cinema_nav_logic.dart';
@@ -49,6 +50,7 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
 
   /// The shell sits at the bottom of the root stack and stays mounted while
   /// other pages cover it, so it publishes that state for its subtree.
+  PageRoute<void>? _route;
   bool _isCovered = false;
 
   @override
@@ -63,7 +65,10 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final route = ModalRoute.of(context);
-    if (route is PageRoute<void>) {
+    if (route is PageRoute<void> && !identical(route, _route)) {
+      rootRouteObserver.unsubscribe(this);
+      _route = route;
+      _isCovered = !route.isCurrent;
       rootRouteObserver.subscribe(this, route);
     }
   }
@@ -203,24 +208,25 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
         isDesktop() && !DesktopWindowConfig.showWindowButton;
     return RouteVisibility(
       isCovered: _isCovered,
-      child: ShellWindowCloseScope(
-        handledByShell: showShellCloseButton,
-        child: PopScope(
-          canPop: false,
-          onPopInvokedWithResult: (didPop, _) {
-            if (!didPop) {
-              _handleSystemBack(context);
-            }
-          },
-          child: OrientationBuilder(
-            builder: (context, orientation) {
-              final isPortrait = orientation == Orientation.portrait;
-              return _buildShell(
+      child: FreezeLayoutWhenCovered(
+        isCovered: _isCovered,
+        child: ShellWindowCloseScope(
+          handledByShell: showShellCloseButton,
+          child: PopScope(
+            canPop: false,
+            onPopInvokedWithResult: (didPop, _) {
+              if (!didPop) {
+                _handleSystemBack(context);
+              }
+            },
+            child: MediaQuerySizeSelector<bool>(
+              select: (size) => size.height > size.width,
+              builder: (context, isPortrait, _) => _buildShell(
                 context,
                 isPortrait: isPortrait,
                 showCloseButton: showShellCloseButton,
-              );
-            },
+              ),
+            ),
           ),
         ),
       ),
@@ -256,10 +262,8 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
     );
   }
 
-  Widget _outlet(BuildContext context) {
-    return MediaQuery.removePadding(
-      context: context,
-      removeTop: true,
+  Widget _outlet() {
+    return _RemoveTopPadding(
       child: NotificationListener<NavigationNotification>(
         // A non-poppable outlet must not override the shell's PopScope state.
         onNotification: (notification) => !notification.canHandlePop,
@@ -280,7 +284,7 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
           compactPortrait: isPortrait,
           showCloseButton: showCloseButton,
         ),
-        Expanded(child: _outlet(context)),
+        Expanded(child: _outlet()),
       ],
     );
 
@@ -311,6 +315,26 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Removes top padding only when non-zero, subscribing solely to
+/// [MediaQuery.paddingOf] on desktop instead of the full [MediaQueryData].
+class _RemoveTopPadding extends StatelessWidget {
+  const _RemoveTopPadding({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (MediaQuery.paddingOf(context).top == 0) {
+      return child;
+    }
+    return MediaQuery.removePadding(
+      context: context,
+      removeTop: true,
+      child: child,
     );
   }
 }
