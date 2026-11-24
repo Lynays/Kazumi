@@ -11,14 +11,17 @@ import 'package:kazumi/bean/card/bangumi_info_card.dart';
 import 'package:kazumi/bean/card/network_img_layer.dart';
 import 'package:kazumi/bean/dialog/adaptive_bottom_sheet.dart';
 import 'package:kazumi/bean/dialog/dialog_helper.dart';
+import 'package:kazumi/bean/settings/visual_effects_config.dart';
 import 'package:kazumi/bean/widget/collect_button.dart';
 import 'package:kazumi/bean/widget/embedded_native_control_area.dart';
 import 'package:kazumi/modules/bangumi/bangumi_item.dart';
+import 'package:kazumi/navigation.dart';
 import 'package:kazumi/pages/info/info_actions_menu.dart';
 import 'package:kazumi/pages/info/info_controller.dart';
 import 'package:kazumi/pages/info/info_tabview.dart';
 import 'package:kazumi/pages/info/rating_review_dialog.dart';
 import 'package:kazumi/pages/info/source_sheet.dart';
+import 'package:kazumi/pages/menu/route_visibility.dart';
 import 'package:kazumi/plugins/plugins_controller.dart';
 import 'package:kazumi/services/logging/logger.dart';
 import 'package:kazumi/services/platform/desktop_window_config.dart';
@@ -42,7 +45,7 @@ class InfoPage extends StatefulWidget {
 }
 
 class _InfoPageState extends State<InfoPage>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, RouteAware {
   static const List<String> _infoTabs = <String>[
     '概览',
     '吐槽',
@@ -56,6 +59,8 @@ class _InfoPageState extends State<InfoPage>
   InfoController get infoController => widget.infoController;
   late final TabController infoTabController;
   late final bool showRating;
+  PageRoute<void>? _route;
+  bool _isCovered = false;
 
   bool commentsIsLoading = false;
   bool charactersIsLoading = false;
@@ -264,7 +269,33 @@ class _InfoPageState extends State<InfoPage>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is PageRoute<void> && !identical(route, _route)) {
+      rootRouteObserver.unsubscribe(this);
+      _route = route;
+      _isCovered = !route.isCurrent;
+      rootRouteObserver.subscribe(this, route);
+    }
+  }
+
+  @override
+  void didPushNext() => _setCovered(true);
+
+  @override
+  void didPopNext() => _setCovered(false);
+
+  void _setCovered(bool value) {
+    if (!mounted || _isCovered == value) {
+      return;
+    }
+    setState(() => _isCovered = value);
+  }
+
+  @override
   void dispose() {
+    rootRouteObserver.unsubscribe(this);
     infoTabController.removeListener(onInfoTabChanged);
     infoController.characterList.clear();
     infoController.clearComments();
@@ -331,7 +362,7 @@ class _InfoPageState extends State<InfoPage>
   Widget build(BuildContext context) {
     final showWindowButton = DesktopWindowConfig.showWindowButton;
     final topOffset = Platform.isMacOS && showWindowButton ? 22.0 : 0.0;
-    return Scaffold(
+    final scaffold = Scaffold(
       body: NestedScrollView(
         headerSliverBuilder: (BuildContext context, bool innerBoxIsScrolled) {
           return <Widget>[
@@ -473,6 +504,13 @@ class _InfoPageState extends State<InfoPage>
         icon: const Icon(Icons.play_arrow_rounded),
       ),
     );
+    return RouteVisibility(
+      isCovered: _isCovered,
+      child: FreezeLayoutWhenCovered(
+        isCovered: _isCovered,
+        child: scaffold,
+      ),
+    );
   }
 }
 
@@ -481,104 +519,79 @@ class _InfoHeaderBackground extends StatelessWidget {
     required this.imageUrl,
   });
 
-  static const double _downsample = 0.5;
-  static const double _blurSigma = 15.0;
+  static const double _sampleWidth = 256.0;
+  static const double _sampleHeight = 160.0;
+  static const double _blurSigma = 5.0;
   static const double _opacity = 0.4;
-  static const double _edgeBleed = 32.0;
-  static const double _bottomFeatherHeight = 48.0;
+  static const double _bottomFeatherHeight = 72.0;
+  static final ImageFilter _blurFilter = ImageFilter.blur(
+    sigmaX: _blurSigma,
+    sigmaY: _blurSigma,
+    tileMode: TileMode.clamp,
+  );
 
   final String imageUrl;
 
   @override
   Widget build(BuildContext context) {
-    if (imageUrl.isEmpty) {
+    final headerBlurScale = VisualEffectsConfig.of(context).headerBlurScale;
+    if (imageUrl.isEmpty || headerBlurScale <= 0) {
       return const SizedBox.shrink();
     }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth;
-        final height = constraints.maxHeight;
-        if (width <= 0 || height <= 0) {
-          return const SizedBox.shrink();
-        }
+    final backgroundColor = Theme.of(context).scaffoldBackgroundColor;
+    final effectiveOpacity = (_opacity * headerBlurScale).clamp(0.0, 1.0);
 
-        final rasterWidth = width * _downsample;
-        final rasterHeight = (height + _edgeBleed) * _downsample;
-
-        final backgroundColor = Theme.of(context).scaffoldBackgroundColor;
-
-        return ClipRect(
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              ShaderMask(
-                shaderCallback: (bounds) {
-                  return const LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.white,
-                      Colors.transparent,
-                    ],
-                    stops: [0.8, 1],
-                  ).createShader(bounds);
-                },
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  child: RepaintBoundary(
-                    child: Transform.scale(
-                      scale: 1 / _downsample,
-                      alignment: Alignment.topCenter,
-                      filterQuality: FilterQuality.low,
-                      child: SizedBox(
-                        width: rasterWidth,
-                        height: rasterHeight,
-                        child: ImageFiltered(
-                          imageFilter: ImageFilter.blur(
-                            sigmaX: _blurSigma * _downsample,
-                            sigmaY: _blurSigma * _downsample,
-                          ),
-                          child: NetworkImgLayer(
-                            src: imageUrl,
-                            width: rasterWidth,
-                            height: rasterHeight,
-                            fadeInDuration: Duration.zero,
-                            fadeOutDuration: Duration.zero,
-                            filterQuality: FilterQuality.low,
-                            color: Colors.white.withValues(alpha: _opacity),
-                            colorBlendMode: BlendMode.modulate,
-                          ),
-                        ),
-                      ),
-                    ),
+    return ClipRect(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          FittedBox(
+            fit: BoxFit.cover,
+            alignment: Alignment.topCenter,
+            child: RepaintBoundary(
+              child: SizedBox(
+                width: _sampleWidth,
+                height: _sampleHeight,
+                child: ImageFiltered(
+                  imageFilter: _blurFilter,
+                  child: NetworkImgLayer(
+                    src: imageUrl,
+                    width: _sampleWidth,
+                    height: _sampleHeight,
+                    borderRadius: BorderRadius.zero,
+                    fadeInDuration: Duration.zero,
+                    fadeOutDuration: Duration.zero,
+                    filterQuality: FilterQuality.low,
+                    color: Colors.white.withValues(alpha: effectiveOpacity),
+                    colorBlendMode: BlendMode.modulate,
                   ),
                 ),
               ),
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                height: _bottomFeatherHeight,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        backgroundColor.withValues(alpha: 0),
-                        backgroundColor.withValues(alpha: 0.55),
-                        backgroundColor,
-                      ],
-                      stops: const [0, 0.72, 1],
-                    ),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
-        );
-      },
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: _bottomFeatherHeight,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    backgroundColor.withValues(alpha: 0),
+                    backgroundColor.withValues(alpha: 0.55),
+                    backgroundColor,
+                  ],
+                  stops: const [0, 0.72, 1],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

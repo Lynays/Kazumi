@@ -157,18 +157,19 @@ class _SearchResultCard extends StatelessWidget {
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: AspectRatio(
-                  aspectRatio: coverAspectRatio,
-                  child: LayoutBuilder(
-                      builder: (_, constraints) => NetworkImgLayer(
-                            src: item.images['large'] ??
-                                item.images['common'] ??
-                                '',
-                            width: constraints.maxWidth,
-                            height: constraints.maxHeight,
-                          )),
-                )),
+              borderRadius: BorderRadius.circular(16),
+              child: AspectRatio(
+                aspectRatio: coverAspectRatio,
+                child: LayoutBuilder(
+                  builder: (_, constraints) => NetworkImgLayer(
+                    src: item.images['large'] ?? item.images['common'] ?? '',
+                    width: constraints.maxWidth,
+                    height: constraints.maxHeight,
+                    borderRadius: BorderRadius.zero,
+                  ),
+                ),
+              ),
+            ),
             const SizedBox(height: titleSpacing),
             SizedBox(
                 height: titleHeight,

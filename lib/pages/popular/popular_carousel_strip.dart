@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_modular/flutter_modular.dart';
 import 'package:kazumi/bean/card/network_img_layer.dart';
+import 'package:kazumi/bean/settings/visual_effects_config.dart';
 import 'package:kazumi/modules/bangumi/bangumi_item.dart';
 import 'package:kazumi/pages/popular/popular_floor_reflection.dart';
 
@@ -88,18 +89,28 @@ class PopularCarouselStrip extends StatelessWidget {
                         }
                         final vPad = cardH * 0.065;
                         final rawH = cardH - vPad * 2;
-                        final reflectH = rawH * 0.21;
-                        final posterH = rawH - reflectH;
+                        // Floor-quantize to 2px steps so posterH + reflectH
+                        // never exceeds rawH and subpixel jitter avoids
+                        // unnecessary child delegate rebuilds.
+                        final posterH = math
+                            .max(1.0, ((rawH * 0.79) / 2.0).floor() * 2.0)
+                            .clamp(1.0, rawH);
+                        final reflectH = math.max(
+                          0.0,
+                          ((rawH - posterH) / 2.0).floor() * 2.0,
+                        );
                         final gap = compact ? 12.0 : 18.0;
                         const sidePadding = 16.0;
                         final viewportWidth = c.hasBoundedWidth
                             ? c.maxWidth
                             : MediaQuery.sizeOf(context).width;
-                        final posterW = math
+                        final rawPosterW = math
                             .max(
                               posterH * (compact ? 1.28 : 1.22),
                               (viewportWidth - sidePadding * 2 - gap * 9) / 10,
                             )
+                            .clamp(compact ? 56.0 : 88.0, 220.0);
+                        final posterW = ((rawPosterW / 2.0).floor() * 2.0)
                             .clamp(compact ? 56.0 : 88.0, 220.0);
                         return SizedBox(
                           width: viewportWidth,
@@ -110,6 +121,8 @@ class PopularCarouselStrip extends StatelessWidget {
                               child: ListView.custom(
                                 controller: controller,
                                 scrollDirection: Axis.horizontal,
+                                scrollCacheExtent:
+                                    const ScrollCacheExtent.pixels(80.0),
                                 padding: EdgeInsets.symmetric(
                                   horizontal: sidePadding,
                                   vertical: vPad,
@@ -127,8 +140,12 @@ class PopularCarouselStrip extends StatelessWidget {
                                           compact: compact,
                                           titleStyle: cardTitleStyle,
                                         ),
-                                  itemCount: items.length,
+                                  items: items,
                                   posterWidth: posterW,
+                                  posterHeight: posterH,
+                                  reflectHeight: reflectH,
+                                  compact: compact,
+                                  titleStyle: cardTitleStyle,
                                   gap: gap,
                                 ),
                               ),
@@ -148,15 +165,26 @@ class PopularCarouselStrip extends StatelessWidget {
 class _StripItemsDelegate extends SliverChildBuilderDelegate {
   _StripItemsDelegate(
     super.builder, {
-    required int itemCount,
-    required double posterWidth,
+    required this.items,
+    required this.posterWidth,
+    required this.posterHeight,
+    required this.reflectHeight,
+    required this.compact,
+    required this.titleStyle,
     required double gap,
-  }) : _scrollExtent = itemCount * posterWidth + (itemCount - 1) * gap,
+  }) : _scrollExtent =
+           items.length * posterWidth + (items.length - 1) * gap,
        super(
-         childCount: itemCount * 2 - 1,
+         childCount: items.length * 2 - 1,
          semanticIndexCallback: (_, index) => index.isEven ? index ~/ 2 : null,
        );
 
+  final List<BangumiItem> items;
+  final double posterWidth;
+  final double posterHeight;
+  final double reflectHeight;
+  final bool compact;
+  final TextStyle? titleStyle;
   final double _scrollExtent;
 
   // With alternating extents, Flutter can still estimate the unseen tail.
@@ -167,6 +195,15 @@ class _StripItemsDelegate extends SliverChildBuilderDelegate {
     double leadingScrollOffset,
     double trailingScrollOffset,
   ) => _scrollExtent;
+
+  @override
+  bool shouldRebuild(covariant _StripItemsDelegate oldDelegate) =>
+      !identical(items, oldDelegate.items) ||
+      posterWidth != oldDelegate.posterWidth ||
+      posterHeight != oldDelegate.posterHeight ||
+      reflectHeight != oldDelegate.reflectHeight ||
+      compact != oldDelegate.compact ||
+      titleStyle != oldDelegate.titleStyle;
 }
 
 class _StripInteractionShell extends StatefulWidget {
@@ -254,8 +291,52 @@ class _StripCard extends StatefulWidget {
   State<_StripCard> createState() => _StripCardState();
 }
 
-class _StripCardState extends State<_StripCard> {
+class _StripCardState extends State<_StripCard>
+    with SingleTickerProviderStateMixin {
   bool _hovered = false;
+  bool _reduceMotion = false;
+  AnimationController? _hoverController;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final nextReduceMotion = MediaQuery.disableAnimationsOf(context);
+    if (_reduceMotion != nextReduceMotion) {
+      _reduceMotion = nextReduceMotion;
+      if (_reduceMotion && _hoverController != null) {
+        _hoverController!.value = 0.0;
+      }
+    }
+  }
+
+  void _setHovered(bool value) {
+    if (_hovered == value) return;
+    _hovered = value;
+    if (_reduceMotion) {
+      setState(() {});
+      return;
+    }
+    if (value) {
+      final created = _hoverController == null;
+      final controller = _hoverController ??= AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 200),
+        reverseDuration: const Duration(milliseconds: 200),
+      );
+      controller.forward();
+      if (created) {
+        setState(() {});
+      }
+    } else {
+      _hoverController?.reverse();
+    }
+  }
+
+  @override
+  void dispose() {
+    _hoverController?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -267,12 +348,9 @@ class _StripCardState extends State<_StripCard> {
     final cover = const ['large', 'common', 'medium', 'small', 'grid']
         .map((k) => item.images[k]?.trim() ?? '')
         .firstWhere((u) => u.isNotEmpty, orElse: () => '');
-    final reduceMotion = MediaQuery.disableAnimationsOf(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardEffectsScale = VisualEffectsConfig.of(context).cardEffectsScale;
     final radius = BorderRadius.circular(12);
-    final animDur = reduceMotion
-        ? Duration.zero
-        : const Duration(milliseconds: 200);
     final lineHeight =
         MediaQuery.textScalerOf(
           context,
@@ -282,6 +360,41 @@ class _StripCardState extends State<_StripCard> {
     final titleSpace = size.height - titleBottom;
     final titleLines = widget.compact || titleSpace < lineHeight * 2 ? 1 : 2;
     final titleTop = math.min(26.0, titleSpace - titleLines * lineHeight);
+    final posterImage = NetworkImgLayer(
+      src: cover,
+      width: size.width,
+      height: size.height,
+      borderRadius: BorderRadius.zero,
+    );
+    final titleBanner = titleSpace >= lineHeight
+        ? Container(
+            padding: EdgeInsets.fromLTRB(
+              8,
+              titleTop,
+              8,
+              titleBottom,
+            ),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.bottomCenter,
+                end: Alignment.topCenter,
+                colors: [
+                  Color(0xF506080C),
+                  Color(0x9A06080C),
+                  Color(0x0006080C),
+                ],
+                stops: [0.0, 0.52, 1.0],
+              ),
+            ),
+            child: Text(
+              title,
+              textAlign: TextAlign.center,
+              maxLines: titleLines,
+              overflow: TextOverflow.ellipsis,
+              style: widget.titleStyle,
+            ),
+          )
+        : null;
 
     return Semantics(
       button: true,
@@ -304,91 +417,82 @@ class _StripCardState extends State<_StripCard> {
                   height: size.height,
                   child: MouseRegion(
                     cursor: SystemMouseCursors.click,
-                    onEnter: (_) => setState(() => _hovered = true),
-                    onExit: (_) => setState(() => _hovered = false),
-                    child: AnimatedContainer(
-                      duration: animDur,
-                      curve: Curves.easeOutCubic,
-                      transformAlignment: Alignment.center,
-                      transform: _hovered && !reduceMotion
-                          ? (Matrix4.identity()
-                              ..setEntry(3, 2, 0.0014)
-                              ..translateByDouble(0, -size.height * 0.06, 0, 1)
-                              ..rotateX(-0.07))
-                          : Matrix4.identity(),
-                      child: AnimatedScale(
-                        scale: _hovered && !reduceMotion ? 1.20 : 1.0,
-                        duration: animDur,
-                        curve: Curves.easeOutCubic,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            borderRadius: radius,
-                            boxShadow: _stripShadows(isDark, _hovered),
-                          ),
-                          child: ClipRRect(
-                            borderRadius: radius,
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                NetworkImgLayer(
-                                  src: cover,
-                                  width: size.width,
-                                  height: size.height,
-                                  borderRadius: radius,
-                                ),
-                                IgnorePointer(
-                                  child: DecoratedBox(
-                                    decoration: _stripSheen(
-                                      isDark,
-                                      _hovered,
-                                      radius,
-                                    ),
-                                  ),
-                                ),
-                                if (titleSpace >= lineHeight)
-                                  Positioned(
-                                    left: 0,
-                                    right: 0,
-                                    bottom: 0,
-                                    child: AnimatedOpacity(
-                                      opacity: _hovered ? 0.0 : 1.0,
-                                      duration: reduceMotion
-                                          ? Duration.zero
-                                          : const Duration(milliseconds: 140),
-                                      child: Container(
-                                        padding: EdgeInsets.fromLTRB(
-                                          8,
-                                          titleTop,
-                                          8,
-                                          titleBottom,
-                                        ),
-                                        decoration: const BoxDecoration(
-                                          gradient: LinearGradient(
-                                            begin: Alignment.bottomCenter,
-                                            end: Alignment.topCenter,
-                                            colors: [
-                                              Color(0xF506080C),
-                                              Color(0x9A06080C),
-                                              Color(0x0006080C),
-                                            ],
-                                            stops: [0.0, 0.52, 1.0],
-                                          ),
-                                        ),
-                                        child: Text(
-                                          title,
-                                          textAlign: TextAlign.center,
-                                          maxLines: titleLines,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: widget.titleStyle,
+                    onEnter: (_) => _setHovered(true),
+                    onExit: (_) => _setHovered(false),
+                    child: AnimatedBuilder(
+                      animation: _hoverController ?? kAlwaysDismissedAnimation,
+                      child: posterImage,
+                      builder: (context, child) {
+                        final rawT = _reduceMotion
+                            ? 0.0
+                            : (_hoverController?.value ?? 0.0);
+                        final t = rawT == 0.0
+                            ? 0.0
+                            : Curves.easeOutCubic.transform(rawT);
+                        final scale = 1.0 + 0.20 * t;
+                        final transform = t == 0.0
+                            ? Matrix4.identity()
+                            : (Matrix4.identity()
+                                ..setEntry(3, 2, 0.0014)
+                                ..translateByDouble(
+                                  0,
+                                  -size.height * 0.06 * t,
+                                  0,
+                                  1,
+                                )
+                                ..rotateX(-0.07 * t)
+                                ..scaleByDouble(scale, scale, 1.0, 1.0));
+                        final titleOpacity = _reduceMotion
+                            ? (_hovered ? 0.0 : 1.0)
+                            : (1.0 - (rawT / 0.7).clamp(0.0, 1.0));
+                        final hoverVisual = _reduceMotion
+                            ? _hovered
+                            : rawT > 0.5;
+                        return Transform(
+                          alignment: Alignment.center,
+                          transform: transform,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              borderRadius: radius,
+                              boxShadow: _stripShadows(
+                                isDark,
+                                hoverVisual,
+                                cardEffectsScale,
+                              ),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: radius,
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  child!,
+                                  if (cardEffectsScale > 0)
+                                    IgnorePointer(
+                                      child: DecoratedBox(
+                                        decoration: _stripSheen(
+                                          isDark,
+                                          hoverVisual,
+                                          radius,
+                                          cardEffectsScale,
                                         ),
                                       ),
                                     ),
-                                  ),
-                              ],
+                                  if (titleBanner != null)
+                                    Positioned(
+                                      left: 0,
+                                      right: 0,
+                                      bottom: 0,
+                                      child: Opacity(
+                                        opacity: titleOpacity,
+                                        child: titleBanner,
+                                      ),
+                                    ),
+                                ],
+                              ),
                             ),
                           ),
-                        ),
-                      ),
+                        );
+                      },
                     ),
                   ),
                 ),
@@ -454,32 +558,43 @@ class _StripScrollBehavior extends MaterialScrollBehavior {
   ) => child;
 }
 
-List<BoxShadow> _stripShadows(bool isDark, bool hovered) => [
-  BoxShadow(
-    color: Colors.black.withValues(
-      alpha: isDark ? (hovered ? 0.75 : 0.58) : (hovered ? 0.28 : 0.16),
-    ),
-    blurRadius: hovered ? 28 : 19,
-    spreadRadius: -4,
-    offset: Offset(0, hovered ? 12 : 6),
-  ),
-  if (hovered)
+List<BoxShadow>? _stripShadows(bool isDark, bool hovered, double scale) {
+  if (scale <= 0) return null;
+  return [
     BoxShadow(
-      color: isDark
-          ? const Color.fromRGBO(190, 212, 255, 0.26)
-          : Colors.black.withValues(alpha: 0.14),
-      blurRadius: 18,
+      color: Colors.black.withValues(
+        alpha: ((isDark ? (hovered ? 0.75 : 0.58) : (hovered ? 0.28 : 0.16)) *
+                scale)
+            .clamp(0.0, 1.0),
+      ),
+      blurRadius: hovered ? 28 : 19,
       spreadRadius: -4,
-      offset: const Offset(0, -1),
+      offset: Offset(0, hovered ? 12 : 6),
     ),
-];
+    if (hovered)
+      BoxShadow(
+        color: isDark
+            ? Color.fromRGBO(190, 212, 255, (0.26 * scale).clamp(0.0, 1.0))
+            : Colors.black.withValues(alpha: (0.14 * scale).clamp(0.0, 1.0)),
+        blurRadius: 18,
+        spreadRadius: -4,
+        offset: const Offset(0, -1),
+      ),
+  ];
+}
 
-BoxDecoration _stripSheen(bool isDark, bool hovered, BorderRadius radius) =>
+BoxDecoration _stripSheen(
+  bool isDark,
+  bool hovered,
+  BorderRadius radius,
+  double scale,
+) =>
     BoxDecoration(
       borderRadius: radius,
       border: Border.all(
         color: Colors.white.withValues(
-          alpha: isDark ? (hovered ? 0.30 : 0.09) : 0.30,
+          alpha: ((isDark ? (hovered ? 0.30 : 0.09) : 0.30) * scale)
+              .clamp(0.0, 1.0),
         ),
         width: 0.85,
       ),
@@ -488,11 +603,14 @@ BoxDecoration _stripSheen(bool isDark, bool hovered, BorderRadius radius) =>
         end: Alignment.bottomRight,
         colors: [
           Colors.white.withValues(
-            alpha: isDark ? (hovered ? 0.22 : 0.08) : 0.26,
+            alpha: ((isDark ? (hovered ? 0.22 : 0.08) : 0.26) * scale)
+                .clamp(0.0, 1.0),
           ),
           Colors.transparent,
           Colors.transparent,
-          const Color(0x5A020306),
+          const Color(0xFF020306).withValues(
+            alpha: ((0x5A / 255.0) * scale).clamp(0.0, 1.0),
+          ),
         ],
         stops: const [0.0, 0.24, 0.70, 1.0],
       ),

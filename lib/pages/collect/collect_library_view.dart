@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -371,8 +373,8 @@ class _CollectLibraryViewState extends State<CollectLibraryView>
 
   Widget _list(List<CollectedBangumi> entries, double contentWidth) {
     const spacing = 12.0;
-    final textScale = (MediaQuery.textScalerOf(context).scale(14) / 14)
-        .clamp(1.0, double.infinity);
+    final scaler = MediaQuery.textScalerOf(context);
+    final textScale = (scaler.scale(14) / 14).clamp(1.0, double.infinity);
     final minWidth = 300 + 160 * (textScale - 1);
     final preferredWidth = 400 + 160 * (textScale - 1);
     final maxColumns =
@@ -381,42 +383,21 @@ class _CollectLibraryViewState extends State<CollectLibraryView>
         .ceil()
         .clamp(1, maxColumns);
 
-    Widget tile(int index) => IndexedSemantics(
-          index: index,
-          child: _CollectListTile(
-            key: ValueKey('collect-${entries[index].bangumiItem.id}'),
-            entry: entries[index],
-            showRating: widget.showRating,
-            onOpen: () => widget.onOpen(entries[index].bangumiItem),
-            onChangeType: _changeTypeFor(entries[index]),
-          ),
-        );
-
-    return SliverList.builder(
-      itemCount: (entries.length + columns - 1) ~/ columns,
-      addSemanticIndexes: false,
-      itemBuilder: (context, row) {
-        final first = row * columns;
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: columns == 1
-              ? tile(first)
-              : IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    spacing: spacing,
-                    children: [
-                      for (var column = 0; column < columns; column++)
-                        Expanded(
-                          child: first + column < entries.length
-                              ? tile(first + column)
-                              : const SizedBox(),
-                        ),
-                    ],
-                  ),
-                ),
-        );
-      },
+    return SliverGrid.builder(
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: columns,
+        crossAxisSpacing: spacing,
+        mainAxisSpacing: 10,
+        mainAxisExtent: _CollectListTile.extent(scaler),
+      ),
+      itemCount: entries.length,
+      itemBuilder: (context, index) => _CollectListTile(
+        key: ValueKey('collect-${entries[index].bangumiItem.id}'),
+        entry: entries[index],
+        showRating: widget.showRating,
+        onOpen: () => widget.onOpen(entries[index].bangumiItem),
+        onChangeType: _changeTypeFor(entries[index]),
+      ),
     );
   }
 

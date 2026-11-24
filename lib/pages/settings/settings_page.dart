@@ -75,7 +75,7 @@ const List<_SettingsGroup> _settingsGroups = [
     categories: [
       _SettingsCategory(
         label: '外观设置',
-        description: '主题、配色与字体',
+        description: '主题、配色、字体与视觉特效',
         icon: Icons.palette_rounded,
         path: '/settings/theme',
       ),

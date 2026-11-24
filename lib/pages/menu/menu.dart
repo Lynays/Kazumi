@@ -3,6 +3,7 @@ import 'package:flutter_modular/flutter_modular.dart';
 import 'package:flutter/services.dart';
 import 'package:kazumi/bean/dialog/dialog_helper.dart';
 import 'package:kazumi/bean/widget/embedded_native_control_area.dart';
+import 'package:kazumi/bean/widget/media_query_size_selector.dart';
 import 'package:kazumi/navigation.dart';
 import 'package:kazumi/pages/menu/route_visibility.dart';
 import 'package:kazumi/pages/router.dart';
@@ -23,6 +24,7 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
 
   /// The shell sits at the bottom of the root stack and stays mounted while
   /// other pages cover it, so it publishes that state for its subtree.
+  PageRoute<void>? _route;
   bool _isCovered = false;
 
   @override
@@ -37,7 +39,10 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final route = ModalRoute.of(context);
-    if (route is PageRoute<void>) {
+    if (route is PageRoute<void> && !identical(route, _route)) {
+      rootRouteObserver.unsubscribe(this);
+      _route = route;
+      _isCovered = !route.isCurrent;
       rootRouteObserver.subscribe(this, route);
     }
   }
@@ -100,19 +105,21 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
   Widget build(BuildContext context) {
     return RouteVisibility(
       isCovered: _isCovered,
-      child: PopScope(
-        canPop: false,
-        onPopInvokedWithResult: (didPop, _) {
-          if (!didPop) {
-            _handleSystemBack(context);
-          }
-        },
-        child: OrientationBuilder(
-          builder: (context, orientation) {
-            return orientation == Orientation.portrait
-                ? _bottomMenu(context, _selectedIndex)
-                : _sideMenu(context, _selectedIndex);
+      child: FreezeLayoutWhenCovered(
+        isCovered: _isCovered,
+        child: PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop) {
+              _handleSystemBack(context);
+            }
           },
+          child: MediaQuerySizeSelector<bool>(
+            select: (size) => size.height > size.width,
+            builder: (context, isPortrait, _) => isPortrait
+                ? _bottomMenu(context, _selectedIndex)
+                : _sideMenu(context, _selectedIndex),
+          ),
         ),
       ),
     );
