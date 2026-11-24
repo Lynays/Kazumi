@@ -225,6 +225,15 @@ class _CollectListTile extends StatelessWidget {
   final VoidCallback onOpen;
   final ValueChanged<CollectType>? onChangeType;
 
+  static double extent(TextScaler scaler) {
+    final titleHeight = (scaler.scale(16) * 1.35 * 2).ceilToDouble();
+    final metaHeight = 8 + (scaler.scale(12) * 1.4).ceilToDouble();
+    final infoHeight = math.max(76.0, 12.0 + titleHeight + metaHeight);
+    final buttonHeight =
+        math.max(48.0, (scaler.scale(14) * 1.4).ceilToDouble() + 24.0);
+    return 20.0 + math.max(120.0, infoHeight + buttonHeight);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -296,6 +305,8 @@ class _CollectListTile extends StatelessWidget {
                                       padding: const EdgeInsets.only(top: 8),
                                       child: Text(
                                         metadata.join('  ·  '),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                         style:
                                             theme.textTheme.bodySmall?.copyWith(
                                           color: colors.onSurfaceVariant,

@@ -15,7 +15,7 @@ class NetworkImgLayer extends StatelessWidget {
     this.fadeOutDuration,
     this.fadeInDuration,
     this.origAspectRatio,
-    this.filterQuality = FilterQuality.high,
+    this.filterQuality = FilterQuality.medium,
     this.color,
     this.colorBlendMode,
     this.borderRadius,
@@ -66,27 +66,32 @@ class NetworkImgLayer extends StatelessWidget {
     }
 
     final (memCacheWidth, memCacheHeight) = _cacheSize(context);
+    final image = CachedNetworkImage(
+      imageUrl: imageUrl,
+      width: width,
+      height: height,
+      memCacheWidth: memCacheWidth,
+      memCacheHeight: memCacheHeight,
+      fit: fit,
+      fadeOutDuration: fadeOutDuration ?? const Duration(milliseconds: 120),
+      fadeInDuration: fadeInDuration ?? const Duration(milliseconds: 120),
+      filterQuality: filterQuality,
+      color: color,
+      colorBlendMode: colorBlendMode,
+      errorListener: (e) {
+        KazumiLogger().w("NetworkImage: network image load error", error: e);
+      },
+      errorWidget: (context, url, error) => _placeholder(context),
+      placeholder: (context, url) => _placeholder(context),
+    );
+    final radius = _borderRadius;
+    if (radius == BorderRadius.zero) {
+      return image;
+    }
     return ClipRRect(
       clipBehavior: Clip.antiAlias,
-      borderRadius: _borderRadius,
-      child: CachedNetworkImage(
-        imageUrl: imageUrl,
-        width: width,
-        height: height,
-        memCacheWidth: memCacheWidth,
-        memCacheHeight: memCacheHeight,
-        fit: fit,
-        fadeOutDuration: fadeOutDuration ?? const Duration(milliseconds: 120),
-        fadeInDuration: fadeInDuration ?? const Duration(milliseconds: 120),
-        filterQuality: filterQuality,
-        color: color,
-        colorBlendMode: colorBlendMode,
-        errorListener: (e) {
-          KazumiLogger().w("NetworkImage: network image load error", error: e);
-        },
-        errorWidget: (context, url, error) => _placeholder(context),
-        placeholder: (context, url) => _placeholder(context),
-      ),
+      borderRadius: radius,
+      child: image,
     );
   }
 
@@ -134,16 +139,18 @@ class NetworkImgLayer extends StatelessWidget {
       });
 
   Widget _placeholder(BuildContext context) {
+    final radius = _borderRadius;
+    final hasRadius = radius != BorderRadius.zero;
     return Container(
       width: width,
       height: height,
-      clipBehavior: Clip.antiAlias,
+      clipBehavior: hasRadius ? Clip.antiAlias : Clip.none,
       decoration: BoxDecoration(
         color: Theme.of(context)
             .colorScheme
             .onInverseSurface
             .withValues(alpha: 0.4),
-        borderRadius: _borderRadius,
+        borderRadius: hasRadius ? radius : null,
       ),
       child: type == 'bg'
           ? const SizedBox()
@@ -154,8 +161,9 @@ class NetworkImgLayer extends StatelessWidget {
                     : 'assets/images/loading.png',
                 width: width,
                 height: height,
-                cacheWidth: width.cacheSize(context),
-                cacheHeight: height.cacheSize(context),
+                fit: type == 'avatar' ? BoxFit.cover : BoxFit.contain,
+                // Decode placeholders once globally so resizing never re-decodes them.
+                cacheWidth: 160,
               ),
             ),
     );

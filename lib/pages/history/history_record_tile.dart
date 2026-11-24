@@ -164,6 +164,7 @@ class HistoryRecordTile extends StatelessWidget {
                                       src: image,
                                       width: coverWidth,
                                       height: coverWidth * 1.4,
+                                      borderRadius: BorderRadius.zero,
                                     ),
                             ),
                           ),

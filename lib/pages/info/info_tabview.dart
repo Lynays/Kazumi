@@ -75,110 +75,123 @@ class _InfoTabViewState extends State<InfoTabView> {
   bool fullIntro = false;
   bool fullTag = false;
 
-  Widget get infoBody {
-    return Center(
+  Widget _maxWidthBox({
+    required Widget child,
+    EdgeInsetsGeometry padding = const EdgeInsets.symmetric(horizontal: 16.0),
+    AlignmentGeometry alignment = Alignment.center,
+  }) {
+    return Align(
+      alignment: alignment,
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: SizedBox(
-          width: MediaQuery.sizeOf(context).width > maxWidth
-              ? maxWidth
-              : MediaQuery.sizeOf(context).width - 32,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('简介', style: TextStyle(fontSize: 18)),
-              const SizedBox(height: 8),
-              LayoutBuilder(builder: (context, constraints) {
-                final span = TextSpan(text: widget.bangumiItem.summary);
-                final tp =
-                    TextPainter(text: span, textDirection: TextDirection.ltr);
-                tp.layout(maxWidth: constraints.maxWidth);
-                final numLines = tp.computeLineMetrics().length;
-                if (numLines > 7) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      SizedBox(
-                        height: fullIntro ? null : 120,
-                        width: MediaQuery.sizeOf(context).width > maxWidth
-                            ? maxWidth
-                            : MediaQuery.sizeOf(context).width - 32,
-                        child: SelectableText(
-                          widget.bangumiItem.summary,
-                          textAlign: TextAlign.start,
-                          scrollBehavior: const ScrollBehavior().copyWith(
-                            scrollbars: false,
-                          ),
-                          scrollPhysics: NeverScrollableScrollPhysics(),
-                          selectionHeightStyle: ui.BoxHeightStyle.max,
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          setState(() {
-                            fullIntro = !fullIntro;
-                          });
-                        },
-                        child: Text(fullIntro ? '加载更少' : '加载更多'),
-                      ),
-                    ],
-                  );
-                } else {
-                  return SelectableText(
-                    widget.bangumiItem.summary,
-                    textAlign: TextAlign.start,
-                    scrollPhysics: NeverScrollableScrollPhysics(),
-                    selectionHeightStyle: ui.BoxHeightStyle.max,
-                  );
-                }
-              }),
-              const SizedBox(height: 16),
-              Text('标签', style: TextStyle(fontSize: 18)),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8.0,
-                runSpacing: isDesktop() ? 8 : 0,
-                children: List<Widget>.generate(
-                    fullTag || widget.bangumiItem.tags.length < 13
-                        ? widget.bangumiItem.tags.length
-                        : 13, (int index) {
-                  if (!fullTag && index == 12) {
-                    return ActionChip(
-                      label: Text(
-                        '更多 +',
-                        style: TextStyle(
-                            color: Theme.of(context).colorScheme.primary),
-                      ),
-                      onPressed: () {
-                        setState(() {
-                          fullTag = !fullTag;
-                        });
-                      },
-                    );
-                  }
-                  return ActionChip(
-                    label: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text('${widget.bangumiItem.tags[index].name} '),
-                        Text(
-                          '${widget.bangumiItem.tags[index].count}',
-                          style: TextStyle(
-                              color: Theme.of(context).colorScheme.primary),
-                        ),
-                      ],
-                    ),
-                    onPressed: () {
-                      final tagName = Uri.encodeComponent(
-                          widget.bangumiItem.tags[index].name);
-                      context.pushNamed('/search/$tagName');
-                    },
-                  );
-                }).toList(),
-              ),
-            ],
-          ),
+        padding: padding,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: maxWidth),
+          child: SizedBox(width: double.infinity, child: child),
         ),
+      ),
+    );
+  }
+
+  Widget get infoBody {
+    return _maxWidthBox(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('简介', style: TextStyle(fontSize: 18)),
+          const SizedBox(height: 8),
+          LayoutBuilder(builder: (context, constraints) {
+            final span = TextSpan(text: widget.bangumiItem.summary);
+            final tp =
+                TextPainter(text: span, textDirection: TextDirection.ltr);
+            final int numLines;
+            try {
+              tp.layout(maxWidth: constraints.maxWidth);
+              numLines = tp.computeLineMetrics().length;
+            } finally {
+              tp.dispose();
+            }
+            if (numLines > 7) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  SizedBox(
+                    height: fullIntro ? null : 120,
+                    width: double.infinity,
+                    child: SelectableText(
+                      widget.bangumiItem.summary,
+                      textAlign: TextAlign.start,
+                      scrollBehavior: const ScrollBehavior().copyWith(
+                        scrollbars: false,
+                      ),
+                      scrollPhysics: NeverScrollableScrollPhysics(),
+                      selectionHeightStyle: ui.BoxHeightStyle.max,
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        fullIntro = !fullIntro;
+                      });
+                    },
+                    child: Text(fullIntro ? '加载更少' : '加载更多'),
+                  ),
+                ],
+              );
+            } else {
+              return SelectableText(
+                widget.bangumiItem.summary,
+                textAlign: TextAlign.start,
+                scrollPhysics: NeverScrollableScrollPhysics(),
+                selectionHeightStyle: ui.BoxHeightStyle.max,
+              );
+            }
+          }),
+          const SizedBox(height: 16),
+          Text('标签', style: TextStyle(fontSize: 18)),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8.0,
+            runSpacing: isDesktop() ? 8 : 0,
+            children: List<Widget>.generate(
+                fullTag || widget.bangumiItem.tags.length < 13
+                    ? widget.bangumiItem.tags.length
+                    : 13, (int index) {
+              if (!fullTag && index == 12) {
+                return ActionChip(
+                  label: Text(
+                    '更多 +',
+                    style:
+                        TextStyle(color: Theme.of(context).colorScheme.primary),
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      fullTag = !fullTag;
+                    });
+                  },
+                );
+              }
+              return ActionChip(
+                label: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('${widget.bangumiItem.tags[index].name} '),
+                    Text(
+                      '${widget.bangumiItem.tags[index].count}',
+                      style: TextStyle(
+                          color: Theme.of(context).colorScheme.primary),
+                    ),
+                  ],
+                ),
+                onPressed: () {
+                  final tagName =
+                      Uri.encodeComponent(widget.bangumiItem.tags[index].name);
+                  context.pushNamed('/search/$tagName');
+                },
+              );
+            }).toList(),
+          ),
+        ],
       ),
     );
   }
@@ -279,35 +292,76 @@ class _InfoTabViewState extends State<InfoTabView> {
   }
 
   Widget get infoBodyBone {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: SizedBox(
-          width: MediaQuery.sizeOf(context).width > maxWidth
-              ? maxWidth
-              : MediaQuery.sizeOf(context).width - 32,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Skeletonizer.zone(child: Bone.text(fontSize: 18, width: 50)),
-              const SizedBox(height: 8),
-              Skeletonizer.zone(child: Bone.multiText(lines: 7)),
-              const SizedBox(height: 16),
-              Skeletonizer.zone(child: Bone.text(fontSize: 18, width: 50)),
-              const SizedBox(height: 8),
-              if (widget.isLoading)
-                Skeletonizer.zone(
-                  child: Wrap(
-                    spacing: 8.0,
-                    runSpacing: 8.0,
-                    children: List.generate(
-                        4, (_) => Bone.button(uniRadius: 8, height: 32)),
-                  ),
-                ),
-            ],
-          ),
-        ),
+    return _maxWidthBox(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Skeletonizer.zone(child: Bone.text(fontSize: 18, width: 50)),
+          const SizedBox(height: 8),
+          Skeletonizer.zone(child: Bone.multiText(lines: 7)),
+          const SizedBox(height: 16),
+          Skeletonizer.zone(child: Bone.text(fontSize: 18, width: 50)),
+          const SizedBox(height: 8),
+          if (widget.isLoading)
+            Skeletonizer.zone(
+              child: Wrap(
+                spacing: 8.0,
+                runSpacing: 8.0,
+                children: List.generate(
+                    4, (_) => Bone.button(uniRadius: 8, height: 32)),
+              ),
+            ),
+        ],
       ),
+    );
+  }
+
+  Widget _buildStaffSliver() {
+    if (widget.staffList.isNotEmpty) {
+      return SliverList.builder(
+        itemCount: widget.staffList.length,
+        itemBuilder: (context, index) {
+          return _maxWidthBox(
+            child: StaffCard(
+              staffFullItem: widget.staffList[index],
+            ),
+          );
+        },
+      );
+    }
+    if (widget.staffQueryTimeout) {
+      return SliverFillRemaining(
+        child: GeneralErrorWidget(
+          title: '制作人员加载失败',
+          errMsg: '请检查网络连接后重试。',
+          onRetry: widget.loadStaff,
+        ),
+      );
+    }
+    if (widget.staffIsEmpty) {
+      return const SliverFillRemaining(
+        hasScrollBody: false,
+        child: GeneralEmptyState(
+          icon: Icons.groups_rounded,
+          title: '暂无制作人员信息',
+        ),
+      );
+    }
+    return SliverList.builder(
+      itemCount: 8,
+      itemBuilder: (context, _) {
+        return _maxWidthBox(
+          alignment: Alignment.topCenter,
+          child: Skeletonizer.zone(
+            child: ListTile(
+              leading: Bone.circle(size: 36),
+              title: Bone.text(width: 100),
+              subtitle: Bone.text(width: 80),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -323,67 +377,56 @@ class _InfoTabViewState extends State<InfoTabView> {
             SliverOverlapInjector(
               handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
             ),
-            SliverLayoutBuilder(builder: (context, _) {
-              if (widget.staffList.isNotEmpty) {
-                return SliverList.builder(
-                  itemCount: widget.staffList.length,
-                  itemBuilder: (context, index) {
-                    return Center(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                        child: SizedBox(
-                          width: MediaQuery.sizeOf(context).width > maxWidth
-                              ? maxWidth
-                              : MediaQuery.sizeOf(context).width - 32,
-                          child: StaffCard(
-                            staffFullItem: widget.staffList[index],
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                );
-              }
-              if (widget.staffQueryTimeout) {
-                return SliverFillRemaining(
-                  child: GeneralErrorWidget(
-                    title: '制作人员加载失败',
-                    errMsg: '请检查网络连接后重试。',
-                    onRetry: widget.loadStaff,
-                  ),
-                );
-              }
-              if (widget.staffIsEmpty) {
-                return const SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: GeneralEmptyState(
-                    icon: Icons.groups_rounded,
-                    title: '暂无制作人员信息',
-                  ),
-                );
-              }
-              return SliverList.builder(
-                itemCount: 8,
-                itemBuilder: (context, _) {
-                  return Align(
-                    alignment: Alignment.topCenter,
-                    child: SizedBox(
-                      width: MediaQuery.sizeOf(context).width > maxWidth
-                          ? maxWidth
-                          : MediaQuery.sizeOf(context).width - 32,
-                      child: Skeletonizer.zone(
-                        child: ListTile(
-                          leading: Bone.circle(size: 36),
-                          title: Bone.text(width: 100),
-                          subtitle: Bone.text(width: 80),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              );
-            }),
+            _buildStaffSliver(),
           ],
+        );
+      },
+    );
+  }
+
+  Widget _buildCharactersSliver() {
+    if (widget.characterList.isNotEmpty) {
+      return SliverList.builder(
+        itemCount: widget.characterList.length,
+        itemBuilder: (context, index) {
+          return _maxWidthBox(
+            child: CharacterCard(
+              characterItem: widget.characterList[index],
+            ),
+          );
+        },
+      );
+    }
+    if (widget.charactersQueryTimeout) {
+      return SliverFillRemaining(
+        child: GeneralErrorWidget(
+          title: '角色列表加载失败',
+          errMsg: '请检查网络连接后重试。',
+          onRetry: widget.loadCharacters,
+        ),
+      );
+    }
+    if (widget.charactersIsEmpty) {
+      return const SliverFillRemaining(
+        hasScrollBody: false,
+        child: GeneralEmptyState(
+          icon: Icons.people_alt_rounded,
+          title: '暂无角色信息',
+        ),
+      );
+    }
+    return SliverList.builder(
+      itemCount: 4,
+      itemBuilder: (context, _) {
+        return _maxWidthBox(
+          alignment: Alignment.topCenter,
+          child: Skeletonizer.zone(
+            child: ListTile(
+              leading: Bone.circle(size: 36),
+              title: Bone.text(width: 100),
+              subtitle: Bone.text(width: 80),
+            ),
+          ),
         );
       },
     );
@@ -401,66 +444,7 @@ class _InfoTabViewState extends State<InfoTabView> {
             SliverOverlapInjector(
               handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
             ),
-            SliverLayoutBuilder(builder: (context, _) {
-              if (widget.characterList.isNotEmpty) {
-                return SliverList.builder(
-                  itemCount: widget.characterList.length,
-                  itemBuilder: (context, index) {
-                    return Center(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                        child: SizedBox(
-                          width: MediaQuery.sizeOf(context).width > maxWidth
-                              ? maxWidth
-                              : MediaQuery.sizeOf(context).width - 32,
-                          child: CharacterCard(
-                            characterItem: widget.characterList[index],
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                );
-              }
-              if (widget.charactersQueryTimeout) {
-                return SliverFillRemaining(
-                  child: GeneralErrorWidget(
-                    title: '角色列表加载失败',
-                    errMsg: '请检查网络连接后重试。',
-                    onRetry: widget.loadCharacters,
-                  ),
-                );
-              }
-              if (widget.charactersIsEmpty) {
-                return const SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: GeneralEmptyState(
-                    icon: Icons.people_alt_rounded,
-                    title: '暂无角色信息',
-                  ),
-                );
-              }
-              return SliverList.builder(
-                itemCount: 4,
-                itemBuilder: (context, _) {
-                  return Align(
-                    alignment: Alignment.topCenter,
-                    child: SizedBox(
-                      width: MediaQuery.sizeOf(context).width > maxWidth
-                          ? maxWidth
-                          : MediaQuery.sizeOf(context).width - 32,
-                      child: Skeletonizer.zone(
-                        child: ListTile(
-                          leading: Bone.circle(size: 36),
-                          title: Bone.text(width: 100),
-                          subtitle: Bone.text(width: 80),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              );
-            }),
+            _buildCharactersSliver(),
           ],
         );
       },

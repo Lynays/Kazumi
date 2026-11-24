@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'package:kazumi/pages/popular/popular_sections.dart';
 import 'package:kazumi/request/apis/bangumi_api.dart';
 import 'package:kazumi/modules/bangumi/bangumi_item.dart';
 import 'package:kazumi/services/network/bangumi_acceleration.dart';
@@ -28,6 +29,14 @@ abstract class _PopularController with Store {
 
   @observable
   ObservableList<BangumiItem> trendList = ObservableList.of([]);
+
+  late final Computed<PopularSections> _popularSectionsComputed = Computed(
+    () => splitPopularItems(trendList),
+    name: '_PopularController.popularSections',
+    keepAlive: true,
+  );
+
+  PopularSections get popularSections => _popularSectionsComputed.value;
 
   double scrollOffset = 0.0;
 

@@ -23,6 +23,7 @@ import 'package:kazumi/pages/video/video_controller.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:canvas_danmaku/canvas_danmaku.dart';
 import 'package:kazumi/bean/dialog/dialog_helper.dart';
+import 'package:kazumi/bean/widget/media_query_size_selector.dart';
 import 'package:kazumi/pages/player/video_details_sheet.dart';
 import 'package:screen_brightness_platform_interface/screen_brightness_platform_interface.dart';
 import 'package:kazumi/pages/history/history_controller.dart';
@@ -91,11 +92,9 @@ class _PlayerItemState extends State<PlayerItem>
   final _videoSurfaceKey = GlobalKey();
   late bool _border;
   late double _opacity;
-  double get _fontSize => GStorage.getSetting(
+  double _fontSizeFor(bool compactLayout) => GStorage.getSetting(
         SettingsKeys.danmakuFontSize,
-        context: SettingContext(
-          compactLayout: MediaQuery.sizeOf(context).shortestSide < 600,
-        ),
+        context: SettingContext(compactLayout: compactLayout),
       );
   late double _danmakuArea;
   late bool _hideTop;
@@ -1390,9 +1389,14 @@ class _PlayerItemState extends State<PlayerItem>
               onHover: (PointerEvent pointerEvent) {
                 // Android taps can emit hover events.
                 if (isDesktop()) {
-                  if (pointerEvent.position.dy > 50 &&
-                      pointerEvent.position.dy <
-                          MediaQuery.of(context).size.height - 70) {
+                  final renderObject = context.findRenderObject();
+                  final height =
+                      renderObject is RenderBox && renderObject.hasSize
+                          ? renderObject.size.height
+                          : null;
+                  if (height != null &&
+                      pointerEvent.localPosition.dy > 50 &&
+                      pointerEvent.localPosition.dy < height - 70) {
                     showVideoController();
                   } else {
                     if (!playerController.panel.showVideoController) {
@@ -1486,30 +1490,33 @@ class _PlayerItemState extends State<PlayerItem>
                       ),
                     ),
                     Positioned.fill(
-                      child: DanmakuScreen(
-                        key: _danmuKey,
-                        createdController: (DanmakuController e) {
-                          playerController.danmaku.canvasController = e;
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            playerController.updateDanmakuSpeed();
-                          });
-                        },
-                        option: DanmakuOption(
-                          hideTop: _hideTop,
-                          hideScroll: _hideScroll,
-                          hideBottom: _hideBottom,
-                          area: _danmakuArea,
-                          opacity: _opacity,
-                          fontSize: _fontSize,
-                          // Speed scaling is applied after canvas creation.
-                          duration: _danmakuDuration,
-                          lineHeight: _danmakuLineHeight,
-                          strokeWidth: _border ? _danmakuBorderSize : 0.0,
-                          fontWeight: _danmakuFontWeight,
-                          massiveMode: _massiveMode,
-                          fontFamily: _danmakuUseSystemFont
-                              ? null
-                              : customAppFontFamily,
+                      child: MediaQuerySizeSelector<bool>(
+                        select: (size) => size.shortestSide < 600,
+                        builder: (context, compactLayout, _) => DanmakuScreen(
+                          key: _danmuKey,
+                          createdController: (DanmakuController e) {
+                            playerController.danmaku.canvasController = e;
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              playerController.updateDanmakuSpeed();
+                            });
+                          },
+                          option: DanmakuOption(
+                            hideTop: _hideTop,
+                            hideScroll: _hideScroll,
+                            hideBottom: _hideBottom,
+                            area: _danmakuArea,
+                            opacity: _opacity,
+                            fontSize: _fontSizeFor(compactLayout),
+                            // Speed scaling is applied after canvas creation.
+                            duration: _danmakuDuration,
+                            lineHeight: _danmakuLineHeight,
+                            strokeWidth: _border ? _danmakuBorderSize : 0.0,
+                            fontWeight: _danmakuFontWeight,
+                            massiveMode: _massiveMode,
+                            fontFamily: _danmakuUseSystemFont
+                                ? null
+                                : customAppFontFamily,
+                          ),
                         ),
                       ),
                     ),
@@ -1571,10 +1578,15 @@ class _PlayerItemState extends State<PlayerItem>
                                 playerController.panel.seekCancelPending =
                                     cancelPending;
                                 if (delta == 0) return;
+                                final renderObject = context.findRenderObject();
+                                final width = renderObject is RenderBox &&
+                                        renderObject.hasSize
+                                    ? renderObject.size.width
+                                    : 0.0;
+                                if (width <= 0) return;
                                 playerController.panel.seekDirection =
                                     delta > 0 ? 1 : -1;
-                                final double scale =
-                                    180000 / MediaQuery.sizeOf(context).width;
+                                final double scale = 180000 / width;
                                 playerController.seeking.updateInteractiveSeek(
                                   playerController.playback.currentPosition +
                                       Duration(
@@ -1596,10 +1608,16 @@ class _PlayerItemState extends State<PlayerItem>
                                 if (!brightnessVolumeGesture) {
                                   return;
                                 }
-                                final double totalWidth =
-                                    MediaQuery.sizeOf(context).width;
-                                final double totalHeight =
-                                    MediaQuery.sizeOf(context).height;
+                                final renderObject = context.findRenderObject();
+                                final boxSize = renderObject is RenderBox &&
+                                        renderObject.hasSize
+                                    ? renderObject.size
+                                    : Size.zero;
+                                if (boxSize.isEmpty) {
+                                  return;
+                                }
+                                final double totalWidth = boxSize.width;
+                                final double totalHeight = boxSize.height;
                                 final double tapPosition =
                                     details.localPosition.dx;
                                 final double sectionWidth = totalWidth / 2;

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_modular/flutter_modular.dart';
@@ -6,6 +7,7 @@ import 'package:kazumi/utils/constants.dart';
 import 'package:kazumi/services/storage/storage.dart';
 import 'package:kazumi/bean/dialog/dialog_helper.dart';
 import 'package:kazumi/bean/settings/theme_provider.dart';
+import 'package:kazumi/bean/settings/visual_effects_config.dart';
 import 'package:kazumi/bean/settings/color_type.dart';
 import 'package:kazumi/bean/settings/settings_detail_scaffold.dart';
 import 'package:kazumi/bean/settings/settings_dropdown_tile.dart';
@@ -28,6 +30,8 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
   late bool useDynamicColor;
   late bool showWindowButton;
   late bool useSystemFont;
+  late VisualEffectsConfig _effects;
+  late bool _showDetailedEffects;
   late final ThemeProvider themeProvider;
 
   @override
@@ -39,7 +43,23 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
     useDynamicColor = GStorage.getSetting(SettingsKeys.useDynamicColor);
     showWindowButton = GStorage.getSetting(SettingsKeys.showWindowButton);
     useSystemFont = GStorage.getSetting(SettingsKeys.useSystemFont);
+    _effects = VisualEffectsConfig.fromStorage();
+    _showDetailedEffects = !_effects.isUniform;
     themeProvider = context.read<ThemeProvider>();
+    themeProvider.setVisualEffects(_effects);
+  }
+
+  double _snapEffectLevel(double value) => (value * 20).round() / 20.0;
+
+  String _formatEffectPercent(int percent) => percent <= 0 ? '关闭' : '$percent%';
+
+  void _applyVisualEffects(VisualEffectsConfig next) {
+    if (next == _effects) return;
+    themeProvider.setVisualEffects(next);
+    setState(() {
+      _effects = next;
+    });
+    unawaited(next.saveToStorage());
   }
 
   void setTheme(Color? color) {
@@ -228,6 +248,113 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
               ),
             ],
             bottomInfo: Text('动态配色仅支持安卓12及以上和桌面平台'),
+          ),
+          SettingsSection(
+            title: const Text('视觉特效'),
+            tiles: [
+              SettingsSliderTile(
+                leading: Icons.auto_awesome_rounded,
+                title: const Text('视觉特效强度'),
+                description: const Text('以默认 70% 为基准，统一调节全局特效强度'),
+                value: _effects.overallLevel,
+                min: VisualEffectsConfig.minLevel,
+                max: VisualEffectsConfig.maxLevel,
+                divisions: 30,
+                valueLabel: _effects.isUniform
+                    ? _formatEffectPercent(_effects.overallPercent)
+                    : '自定义 · ${_effects.overallPercent}%',
+                onChanged: (value) => _applyVisualEffects(
+                  VisualEffectsConfig.uniform(_snapEffectLevel(value)),
+                ),
+              ),
+              SettingsTile(
+                leading: Icons.tune_rounded,
+                title: const Text('单项特效调节'),
+                description: const Text('分别调整倒影、反光、阴影与背景虚化'),
+                value: Text(
+                  _effects.isUniform
+                      ? (_effects.overallPercent == 0
+                          ? '全部关闭'
+                          : '统一 ${_effects.overallPercent}%')
+                      : '已自定义',
+                ),
+                trailing: Icon(
+                  _showDetailedEffects
+                      ? Icons.expand_less_rounded
+                      : Icons.expand_more_rounded,
+                ),
+                onPressed: (_) {
+                  setState(() {
+                    _showDetailedEffects = !_showDetailedEffects;
+                  });
+                },
+              ),
+              if (_showDetailedEffects) ...[
+                SettingsSliderTile(
+                  leading: Icons.flip_rounded,
+                  title: const Text('海报底部倒影'),
+                  description: const Text('首页轮播与榜单拼贴卡片下方的镜像倒影'),
+                  value: _effects.reflection,
+                  min: VisualEffectsConfig.minLevel,
+                  max: VisualEffectsConfig.maxLevel,
+                  divisions: 30,
+                  valueLabel: _formatEffectPercent(_effects.reflectionPercent),
+                  onChanged: (value) => _applyVisualEffects(
+                    _effects.copyWith(reflection: _snapEffectLevel(value)),
+                  ),
+                ),
+                SettingsSliderTile(
+                  leading: Icons.flare_rounded,
+                  title: const Text('舞台地面反光'),
+                  description: const Text('首页展示区与轮播区地面的环境反光'),
+                  value: _effects.floorLight,
+                  min: VisualEffectsConfig.minLevel,
+                  max: VisualEffectsConfig.maxLevel,
+                  divisions: 30,
+                  valueLabel: _formatEffectPercent(_effects.floorLightPercent),
+                  onChanged: (value) => _applyVisualEffects(
+                    _effects.copyWith(floorLight: _snapEffectLevel(value)),
+                  ),
+                ),
+                SettingsSliderTile(
+                  leading: Icons.layers_rounded,
+                  title: const Text('卡片阴影与光泽'),
+                  description: const Text('首页海报卡片的立体阴影、高光描边与按钮辉光'),
+                  value: _effects.cardEffects,
+                  min: VisualEffectsConfig.minLevel,
+                  max: VisualEffectsConfig.maxLevel,
+                  divisions: 30,
+                  valueLabel: _formatEffectPercent(_effects.cardEffectsPercent),
+                  onChanged: (value) => _applyVisualEffects(
+                    _effects.copyWith(cardEffects: _snapEffectLevel(value)),
+                  ),
+                ),
+                SettingsSliderTile(
+                  leading: Icons.blur_on_rounded,
+                  title: const Text('详情页背景虚化'),
+                  description: const Text('番剧详情页顶部的封面模糊氛围背景'),
+                  value: _effects.headerBlur,
+                  min: VisualEffectsConfig.minLevel,
+                  max: VisualEffectsConfig.maxLevel,
+                  divisions: 30,
+                  valueLabel: _formatEffectPercent(_effects.headerBlurPercent),
+                  onChanged: (value) => _applyVisualEffects(
+                    _effects.copyWith(headerBlur: _snapEffectLevel(value)),
+                  ),
+                ),
+                SettingsTile(
+                  leading: Icons.settings_backup_restore_rounded,
+                  enabled: !_effects.isDefault,
+                  title: const Text('恢复默认特效强度'),
+                  description: const Text('将所有视觉特效恢复为 70% 基准强度'),
+                  onPressed: (_) =>
+                      _applyVisualEffects(VisualEffectsConfig.defaults),
+                ),
+              ],
+            ],
+            bottomInfo: const Text(
+              '调至 0% 将关闭对应特效以降低绘制开销，70% 为默认基准强度，最高可调至 150%',
+            ),
           ),
           SettingsSection(
             title: Text('显示'),

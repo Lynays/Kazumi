@@ -1,7 +1,7 @@
-import 'dart:ui' as ui;
-
 import 'package:flutter/material.dart';
 import 'package:kazumi/bean/card/network_img_layer.dart';
+import 'package:kazumi/bean/settings/visual_effects_config.dart';
+import 'package:kazumi/bean/widget/window_resize_scope.dart';
 
 class PopularFloorReflection extends StatelessWidget {
   const PopularFloorReflection({
@@ -17,24 +17,39 @@ class PopularFloorReflection extends StatelessWidget {
   final double depth;
   final bool foreground;
 
-  static final _blur = ui.ImageFilter.blur(
-    sigmaX: 1.25,
-    sigmaY: 1.85,
-    tileMode: TileMode.decal,
-  );
-  static final _darkForegroundFade = _makeFade(0.46);
-  static final _lightForegroundFade = _makeFade(0.19);
-  static final _darkBackgroundFade = _makeFade(0.27);
-  static final _lightBackgroundFade = _makeFade(0.09);
+  static final Map<int, ShaderCallback> _fadeCache = <int, ShaderCallback>{};
+
+  static ShaderCallback _fadeFor({
+    required bool foreground,
+    required bool isDark,
+    required int percent,
+    required double scale,
+  }) {
+    final key = percent * 4 + (foreground ? 2 : 0) + (isDark ? 1 : 0);
+    return _fadeCache.putIfAbsent(key, () {
+      final base = foreground
+          ? (isDark ? 0.46 : 0.19)
+          : (isDark ? 0.27 : 0.09);
+      return _makeFade((base * scale).clamp(0.0, 1.0));
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     if (size.isEmpty || depth <= 0) return const SizedBox.shrink();
-    if (cover.isEmpty) return SizedBox(height: depth);
+    final effects = VisualEffectsConfig.of(context);
+    final scale = effects.reflectionScale;
+    final isResizing = WindowResizeScope.isResizingOf(context);
+    if (cover.isEmpty || scale <= 0 || isResizing) {
+      return SizedBox(width: size.width, height: depth);
+    }
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final fade = foreground
-        ? (isDark ? _darkForegroundFade : _lightForegroundFade)
-        : (isDark ? _darkBackgroundFade : _lightBackgroundFade);
+    final fade = _fadeFor(
+      foreground: foreground,
+      isDark: isDark,
+      percent: effects.reflectionPercent,
+      scale: scale,
+    );
     final mirror = ClipRect(
       child: OverflowBox(
         alignment: Alignment.topCenter,
@@ -50,6 +65,7 @@ class PopularFloorReflection extends StatelessWidget {
               width: size.width,
               height: size.height,
               borderRadius: BorderRadius.zero,
+              filterQuality: FilterQuality.low,
               color: isDark ? const Color(0xFFE2D5DF) : null,
               colorBlendMode: BlendMode.modulate,
             ),
@@ -68,7 +84,7 @@ class PopularFloorReflection extends StatelessWidget {
             child: ShaderMask(
               blendMode: BlendMode.dstIn,
               shaderCallback: fade,
-              child: ImageFiltered(imageFilter: _blur, child: mirror),
+              child: mirror,
             ),
           ),
         ),

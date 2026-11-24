@@ -14,6 +14,8 @@ import 'package:window_manager/window_manager.dart';
 import 'package:kazumi/bean/dialog/dialog_helper.dart';
 import 'package:kazumi/bean/dialog/exit_confirmation_dialog.dart';
 import 'package:kazumi/bean/settings/theme_provider.dart';
+import 'package:kazumi/bean/settings/visual_effects_config.dart';
+import 'package:kazumi/bean/widget/window_resize_scope.dart';
 import 'package:kazumi/navigation.dart';
 import 'package:kazumi/utils/constants.dart';
 import 'package:kazumi/utils/device.dart';
@@ -102,6 +104,7 @@ class _AppWidgetState extends State<AppWidget>
       GStorage.getSetting(SettingsKeys.useSystemFont),
       notify: false,
     );
+    themeProvider.setVisualEffects(VisualEffectsConfig.fromStorage());
 
     final color = _storedThemeColor();
     final oledEnhance = GStorage.getSetting(SettingsKeys.oledEnhance);
@@ -295,6 +298,16 @@ class _AppWidgetState extends State<AppWidget>
           themeMode: themeProvider.themeMode,
           scaffoldMessengerKey: rootScaffoldMessengerKey,
           routerConfig: ModularApp.routerConfigOf(context),
+          builder: (context, child) => WindowResizeScope(
+            child: ValueListenableBuilder<VisualEffectsConfig>(
+              valueListenable: themeProvider.visualEffects,
+              builder: (context, effects, innerChild) => VisualEffectsScope(
+                config: effects,
+                child: innerChild ?? const SizedBox.shrink(),
+              ),
+              child: child,
+            ),
+          ),
         );
       },
     );

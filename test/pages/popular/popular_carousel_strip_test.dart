@@ -95,10 +95,28 @@ void main() {
         onInfo: (args) => pushedArgs = args,
       );
 
-      double firstScale() =>
-          t.widget<AnimatedScale>(find.byType(AnimatedScale).first).scale;
-      double firstTitleOpacity() =>
-          t.widget<AnimatedOpacity>(find.byType(AnimatedOpacity).first).opacity;
+      double firstScale() {
+        final transform = t.widget<Transform>(
+          find
+              .ancestor(
+                of: find.byType(NetworkImgLayer).first,
+                matching: find.byType(Transform),
+              )
+              .first,
+        );
+        return transform.transform.storage[0];
+      }
+
+      double firstTitleOpacity() => t
+          .widget<Opacity>(
+            find
+                .ancestor(
+                  of: find.text('番剧 11'),
+                  matching: find.byType(Opacity),
+                )
+                .first,
+          )
+          .opacity;
 
       final gesture = await t.createGesture(kind: PointerDeviceKind.mouse);
       addTearDown(gesture.removePointer);
@@ -109,14 +127,14 @@ void main() {
       expect(starts, 1);
       expect(ends, 0);
       expect(find.byType(Tooltip), findsNothing);
-      expect(firstScale(), 1.2);
-      expect(firstTitleOpacity(), 0.0);
+      expect(firstScale(), closeTo(1.2, 1e-4));
+      expect(firstTitleOpacity(), closeTo(0.0, 1e-4));
 
       await gesture.moveTo(const Offset(1, 1));
       await t.pumpAndSettle();
       expect(ends, 1);
-      expect(firstScale(), 1.0);
-      expect(firstTitleOpacity(), 1.0);
+      expect(firstScale(), closeTo(1.0, 1e-4));
+      expect(firstTitleOpacity(), closeTo(1.0, 1e-4));
 
       await t.tap(find.text('番剧 11'));
       await t.pumpAndSettle();

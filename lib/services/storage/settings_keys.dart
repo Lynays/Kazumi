@@ -256,6 +256,26 @@ class SettingsKeys {
     false,
     group: SettingGroup.theme,
   );
+  static const effectReflection = SettingKey<double>(
+    'effectReflection',
+    0.7,
+    group: SettingGroup.theme,
+  );
+  static const effectFloorLight = SettingKey<double>(
+    'effectFloorLight',
+    0.7,
+    group: SettingGroup.theme,
+  );
+  static const effectCardEffects = SettingKey<double>(
+    'effectCardEffects',
+    0.7,
+    group: SettingGroup.theme,
+  );
+  static const effectHeaderBlur = SettingKey<double>(
+    'effectHeaderBlur',
+    0.7,
+    group: SettingGroup.theme,
+  );
   static const displayMode = SettingKey<String?>(
     _SettingBoxKey.displayMode,
     null,
@@ -624,6 +644,10 @@ class SettingsKeys {
     playResume,
     showPlayerError,
     oledEnhance,
+    effectReflection,
+    effectFloorLight,
+    effectCardEffects,
+    effectHeaderBlur,
     displayMode,
     enableGitProxy,
     ruleRepositoryUrl,

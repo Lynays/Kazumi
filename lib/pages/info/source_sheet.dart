@@ -16,6 +16,7 @@ import 'package:kazumi/bean/widget/state_presentation.dart';
 import 'package:kazumi/modules/search/plugin_search_module.dart';
 import 'package:kazumi/pages/collect/collect_controller.dart';
 import 'package:kazumi/pages/info/info_controller.dart';
+import 'package:kazumi/pages/menu/route_visibility.dart';
 import 'package:kazumi/pages/video/video_playback_args.dart';
 import 'package:kazumi/plugins/anti_crawler_config.dart';
 import 'package:kazumi/plugins/plugins.dart';
@@ -175,45 +176,50 @@ class _SourceSheetState extends State<SourceSheet> with KazumiDialogOwner {
       );
 
   @override
-  Widget build(BuildContext context) => Observer(
-        builder: (context) {
-          // Snapshot observable values here; lazy list builders are not tracked.
-          final groupsByName = {
-            for (final plugin in _pluginsController.pluginList)
-              plugin.name: _SourceSearchGroup(
-                name: plugin.name,
-                keyword: _keywordFor(plugin.name),
-                status: widget.infoController.pluginSearchStatus[plugin.name] ??
-                    PluginSearchStatus.pending,
-                results: <SearchItem>[],
-              ),
-          };
-          final seenBySource = <String, Set<String>>{};
-          String? firstResultSource;
-          // Responses follow completion order; groups keep configured order.
-          for (final response
-              in widget.infoController.pluginSearchResponseList) {
-            final group = groupsByName[response.pluginName];
-            if (group == null) continue;
-            final seen = seenBySource.putIfAbsent(group.name, () => <String>{});
-            for (final result in response.data) {
-              if (seen.add(result.src)) group.results.add(result);
+  Widget build(BuildContext context) => FreezeLayoutWhenCovered(
+        isCovered: false,
+        child: Observer(
+          builder: (context) {
+            // Snapshot observable values here; lazy list builders are not tracked.
+            final groupsByName = {
+              for (final plugin in _pluginsController.pluginList)
+                plugin.name: _SourceSearchGroup(
+                  name: plugin.name,
+                  keyword: _keywordFor(plugin.name),
+                  status:
+                      widget.infoController.pluginSearchStatus[plugin.name] ??
+                          PluginSearchStatus.pending,
+                  results: <SearchItem>[],
+                ),
+            };
+            final seenBySource = <String, Set<String>>{};
+            String? firstResultSource;
+            // Responses follow completion order; groups keep configured order.
+            for (final response
+                in widget.infoController.pluginSearchResponseList) {
+              final group = groupsByName[response.pluginName];
+              if (group == null) continue;
+              final seen =
+                  seenBySource.putIfAbsent(group.name, () => <String>{});
+              for (final result in response.data) {
+                if (seen.add(result.src)) group.results.add(result);
+              }
+              if (group.hasResults) firstResultSource ??= group.name;
             }
-            if (group.hasResults) firstResultSource ??= group.name;
-          }
-          return _SourceSheetView(
-            keyword: _keyword,
-            groups: groupsByName.values.toList(),
-            firstResultSource: firstResultSource,
-            onSourceSearch: _showCustomKeyword,
-            onSourceAliasSearch: _showAliasPicker,
-            onRetry: _retry,
-            onVerify: (name) =>
-                _captchaFlow.start(_pluginFor(name), _keywordFor(name)),
-            onOpenBrowser: _openInBrowser,
-            onPlay: _openSearchItem,
-            onClose: () => Navigator.of(context).pop(),
-          );
-        },
+            return _SourceSheetView(
+              keyword: _keyword,
+              groups: groupsByName.values.toList(),
+              firstResultSource: firstResultSource,
+              onSourceSearch: _showCustomKeyword,
+              onSourceAliasSearch: _showAliasPicker,
+              onRetry: _retry,
+              onVerify: (name) =>
+                  _captchaFlow.start(_pluginFor(name), _keywordFor(name)),
+              onOpenBrowser: _openInBrowser,
+              onPlay: _openSearchItem,
+              onClose: () => Navigator.of(context).pop(),
+            );
+          },
+        ),
       );
 }

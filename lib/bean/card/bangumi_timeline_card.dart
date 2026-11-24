@@ -189,6 +189,7 @@ class BangumiTimelineCard extends StatelessWidget {
                       src: imageUrl,
                       width: constraints.maxWidth,
                       height: constraints.maxHeight,
+                      borderRadius: BorderRadius.zero,
                     ),
             ),
           ),
