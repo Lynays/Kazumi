@@ -26,6 +26,11 @@ import 'package:kazumi/navigation.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (isDesktop()) {
+    // Keep more decoded posters warm in RAM on desktop to prevent re-decode
+    // stalls when scrolling through long category grids and overview rows.
+    PaintingBinding.instance.imageCache.maximumSizeBytes = 256 << 20;
+  }
   AppDeepLinks().start();
   registerEchHttpLicenses();
   MediaKit.ensureInitialized();

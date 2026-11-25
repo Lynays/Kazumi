@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_mobx/flutter_mobx.dart';
 import 'package:flutter_modular/flutter_modular.dart';
 import 'package:kazumi/bean/appbar/sys_app_bar.dart';
 import 'package:kazumi/bean/dialog/dialog_helper.dart';
@@ -14,11 +13,11 @@ import 'package:kazumi/pages/menu/cinema_navigation_bars.dart';
 import 'package:kazumi/pages/menu/cinema_search_bar.dart';
 import 'package:kazumi/pages/menu/cinema_top_bar.dart';
 import 'package:kazumi/pages/menu/route_visibility.dart';
+import 'package:kazumi/pages/popular/category_controller.dart';
 import 'package:kazumi/pages/popular/popular_controller.dart';
 import 'package:kazumi/pages/router.dart';
 import 'package:kazumi/repositories/search_history_repository.dart';
 import 'package:kazumi/services/platform/desktop_window_config.dart';
-import 'package:kazumi/utils/constants.dart';
 import 'package:kazumi/utils/device.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -27,11 +26,13 @@ class ScaffoldMenu extends StatefulWidget {
     super.key,
     required this.location,
     this.popularController,
+    this.categoryController,
     this.historyRepository,
   });
 
   final String location;
   final PopularController? popularController;
+  final CategoryController? categoryController;
   final ISearchHistoryRepository? historyRepository;
 
   @override
@@ -43,6 +44,8 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
   final _searchBarKey = GlobalKey();
   late final PopularController _popularController =
       widget.popularController ?? inject<PopularController>();
+  late final CategoryController _categoryController =
+      widget.categoryController ?? inject<CategoryController>();
   late final ISearchHistoryRepository _historyRepository =
       widget.historyRepository ?? inject<ISearchHistoryRepository>();
   late int _selectedIndex = menu.indexForPath(widget.location);
@@ -108,6 +111,10 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
       currentRouteIndex: _selectedIndex,
       tapped: tab,
     );
+    if (targetIndex == 0) {
+      _selectHome();
+      return;
+    }
     _selectDestination(targetIndex);
   }
 
@@ -116,6 +123,7 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
   }
 
   void _selectHome() {
+    _categoryController.openHome();
     if (_selectedIndex != 0) {
       _selectDestination(0);
     }
@@ -123,26 +131,19 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
       _popularController.scrollOffset = 0.0;
       _popularController.setCurrentTag('');
       _popularController.clearBangumiList();
-      unawaited(
-        _popularController.queryBangumiByTrend(
-          type: _popularController.trendList.isEmpty ? 'init' : 'add',
-        ),
-      );
+    }
+    if (_popularController.trendList.isEmpty &&
+        !_popularController.isLoadingMore) {
+      unawaited(_popularController.queryBangumiByTrend(type: 'init'));
     }
   }
 
-  void _selectCategoryTag(String tag) {
-    if (tag.isEmpty) {
-      _selectHome();
-      return;
-    }
-    if (tag != _popularController.currentTag) {
+  void _selectCategory() {
+    _categoryController.openCategoryOverview();
+    if (_popularController.currentTag.isNotEmpty) {
       _popularController.scrollOffset = 0.0;
-      _popularController.setCurrentTag(tag);
-      unawaited(_popularController.queryBangumiByTag(type: 'init'));
-    } else if (_popularController.bangumiList.isEmpty &&
-        !_popularController.isLoadingMore) {
-      unawaited(_popularController.queryBangumiByTag(type: 'init'));
+      _popularController.setCurrentTag('');
+      _popularController.clearBangumiList();
     }
     if (_selectedIndex != 0) {
       _selectDestination(0);
@@ -184,8 +185,13 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
       return;
     }
 
+    if (_selectedIndex == 0 && _categoryController.handleBack()) {
+      _lastExitPromptAt = null;
+      return;
+    }
+
     if (_selectedIndex != 0) {
-      _selectDestination(0);
+      _selectHome();
       return;
     }
 
@@ -246,13 +252,14 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
     required bool compactPortrait,
     required bool showCloseButton,
   }) {
-    return Observer(
-      builder: (_) => CinemaTopBar(
+    return ListenableBuilder(
+      listenable: _categoryController,
+      builder: (_, _) => CinemaTopBar(
         isHomeRoute: _selectedIndex == 0,
-        selectedCategoryTag: _popularController.currentTag,
-        tags: defaultAnimeTags,
+        isCategoryActive: _categoryController.isCategoryActive,
+        activeCategoryTag: _categoryController.activeTag,
         onSelectHome: _selectHome,
-        onSelectCategoryTag: _selectCategoryTag,
+        onSelectCategory: _selectCategory,
         searchBar: _buildSearchBar(),
         compactPortrait: compactPortrait,
         onHistoryTap: compactPortrait ? _handleHistoryTap : null,

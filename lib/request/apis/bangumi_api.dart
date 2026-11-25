@@ -231,12 +231,12 @@ class BangumiApi {
     ).toString();
   }
 
-  static Future<List<BangumiItem>> getBangumiMirrorPopularSubjects({
+  static Future<BangumiSearchPage?> getBangumiMirrorPopularPage({
     String tag = '',
     int limit = 24,
     int offset = 0,
   }) async {
-    List<BangumiItem> bangumiList = [];
+    final List<BangumiItem> bangumiList = [];
     try {
       final jsonData = await _client.get(
         ApiEndpoints.bangumiMirrorDomain +
@@ -247,16 +247,36 @@ class BangumiApi {
             ),
       );
       final jsonList = jsonData is List ? jsonData : jsonData['data'];
-      for (dynamic jsonItem in jsonList) {
+      if (jsonList is! List) {
+        return null;
+      }
+      for (final dynamic jsonItem in jsonList) {
         if (jsonItem is Map<String, dynamic>) {
           bangumiList.add(BangumiItem.fromJson(jsonItem));
         }
       }
+      return BangumiSearchPage(
+        items: bangumiList,
+        rawCount: jsonList.length,
+      );
     } catch (e) {
       KazumiLogger()
           .e('Network: resolve bangumi mirror popular list failed', error: e);
+      return null;
     }
-    return bangumiList;
+  }
+
+  static Future<List<BangumiItem>> getBangumiMirrorPopularSubjects({
+    String tag = '',
+    int limit = 24,
+    int offset = 0,
+  }) async {
+    final page = await getBangumiMirrorPopularPage(
+      tag: tag,
+      limit: limit,
+      offset: offset,
+    );
+    return page?.items ?? <BangumiItem>[];
   }
 
   static List<String> _buildNumberFilter<T extends num>(T? min, T? max) {

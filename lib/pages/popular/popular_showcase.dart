@@ -179,6 +179,156 @@ class PopularShowcaseWithCarousels extends StatelessWidget {
   }
 }
 
+/// Standalone A-zone golden-ratio showcase with optional stage floor glow and
+/// mosaic reflection overhang space, ready to mount inside a [CustomScrollView].
+class PopularShowcaseStage extends StatelessWidget {
+  const PopularShowcaseStage({
+    super.key,
+    required this.featured,
+    required this.mosaic,
+    required this.showcaseHeight,
+    this.bottomGap = 16.0,
+    this.isLoading = false,
+  });
+
+  final BangumiItem? featured;
+  final List<BangumiItem> mosaic;
+  final double showcaseHeight;
+  final double bottomGap;
+  final bool isLoading;
+
+  @override
+  Widget build(BuildContext context) {
+    if (isLoading && featured == null && mosaic.isEmpty) {
+      return _ShowcaseSkeletonStage(
+        showcaseHeight: showcaseHeight,
+        bottomGap: bottomGap,
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < PopularShowcase._narrowBreak) {
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              PopularShowcase(featured: featured, mosaic: mosaic),
+              SizedBox(height: bottomGap),
+            ],
+          );
+        }
+
+        final mirrorOverhang = bottomGap.clamp(
+          0.0,
+          PopularRankMosaic.floorReflectionDepth - 5,
+        );
+        final floorSpace =
+            mosaic.isEmpty ||
+                showcaseHeight + mirrorOverhang <
+                    PopularRankMosaic.minReflectionHeight
+            ? 0.0
+            : mirrorOverhang;
+        final effects = VisualEffectsConfig.of(context);
+        final floorLightScale = effects.floorLightScale;
+
+        return SizedBox(
+          height: showcaseHeight + bottomGap,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              if (floorLightScale > 0 &&
+                  Theme.of(context).brightness == Brightness.dark &&
+                  mosaic.isNotEmpty &&
+                  showcaseHeight >= _ShowcaseFloor.aboveCardBottom)
+                Positioned(
+                  top: showcaseHeight - _ShowcaseFloor.aboveCardBottom,
+                  left: 0,
+                  right: 0,
+                  child: _ShowcaseFloor(
+                    percent: effects.floorLightPercent,
+                    scale: floorLightScale,
+                  ),
+                ),
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                height: showcaseHeight + floorSpace,
+                child: PopularShowcase(
+                  featured: featured,
+                  mosaic: mosaic,
+                  mosaicFloorSpace: floorSpace,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ShowcaseSkeletonStage extends StatelessWidget {
+  const _ShowcaseSkeletonStage({
+    required this.showcaseHeight,
+    required this.bottomGap,
+  });
+
+  final double showcaseHeight;
+  final double bottomGap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fill = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Theme.of(context).colorScheme.surfaceContainerHighest.withValues(
+            alpha: 0.45,
+          );
+    Widget box() => DecoratedBox(
+      decoration: BoxDecoration(
+        color: fill,
+        borderRadius: BorderRadius.circular(14),
+      ),
+    );
+
+    return LayoutBuilder(
+      builder: (_, constraints) {
+        if (constraints.maxWidth < PopularShowcase._narrowBreak) {
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(height: 200, child: box()),
+              const SizedBox(height: PopularShowcase._gap),
+              SizedBox(height: 160, child: box()),
+              SizedBox(height: bottomGap),
+            ],
+          );
+        }
+
+        final netW = constraints.maxWidth - PopularShowcase._gap;
+        final leftW = netW * PopularShowcase._golden;
+        final rightW = netW - leftW;
+        return Padding(
+          padding: EdgeInsets.only(bottom: bottomGap),
+          child: SizedBox(
+            height: showcaseHeight,
+            child: Row(
+              children: [
+                SizedBox(width: leftW, height: showcaseHeight, child: box()),
+                const SizedBox(width: PopularShowcase._gap),
+                SizedBox(width: rightW, height: showcaseHeight, child: box()),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _ShowcaseFloor extends StatelessWidget {
   const _ShowcaseFloor({required this.percent, required this.scale});
 

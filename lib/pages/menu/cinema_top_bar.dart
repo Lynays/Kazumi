@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:kazumi/bean/appbar/drag_to_move_bar.dart';
 import 'package:kazumi/bean/widget/embedded_native_control_area.dart';
-import 'package:kazumi/bean/widget/kazumi_menu.dart';
 import 'package:kazumi/pages/menu/cinema_nav_logic.dart';
 import 'package:kazumi/pages/menu/cinema_tokens.dart';
 
@@ -10,10 +9,10 @@ class CinemaTopBar extends StatelessWidget {
   const CinemaTopBar({
     super.key,
     required this.isHomeRoute,
-    required this.selectedCategoryTag,
-    required this.tags,
+    required this.isCategoryActive,
+    this.activeCategoryTag = '',
     required this.onSelectHome,
-    required this.onSelectCategoryTag,
+    required this.onSelectCategory,
     required this.searchBar,
     required this.compactPortrait,
     this.onHistoryTap,
@@ -22,18 +21,20 @@ class CinemaTopBar extends StatelessWidget {
   });
 
   final bool isHomeRoute;
-  final String selectedCategoryTag;
-  final List<String> tags;
+  final bool isCategoryActive;
+  final String activeCategoryTag;
   final VoidCallback onSelectHome;
-  final ValueChanged<String> onSelectCategoryTag;
+  final VoidCallback onSelectCategory;
   final Widget searchBar;
   final bool compactPortrait;
   final VoidCallback? onHistoryTap;
   final bool showCloseButton;
   final VoidCallback? onCloseWindow;
 
-  bool get _homeActive => isHomeRoute && selectedCategoryTag.isEmpty;
-  bool get _categoryActive => isHomeRoute && selectedCategoryTag.isNotEmpty;
+  bool get _homeActive => isHomeRoute && !isCategoryActive;
+  bool get _categoryActive => isHomeRoute && isCategoryActive;
+  bool get _showCategoryBack =>
+      _categoryActive && activeCategoryTag.isNotEmpty;
 
   @override
   Widget build(BuildContext context) {
@@ -59,6 +60,10 @@ class CinemaTopBar extends StatelessWidget {
           _buildHomeButton(context),
           const SizedBox(width: 8),
           _buildCategoryButton(context),
+          if (_showCategoryBack) ...[
+            const SizedBox(width: 8),
+            _buildCategoryBackButton(context),
+          ],
           const SizedBox(width: 16),
           Expanded(
             child: Center(
@@ -133,6 +138,10 @@ class CinemaTopBar extends StatelessWidget {
                 _buildHomeButton(context),
                 const SizedBox(width: 8),
                 Flexible(child: _buildCategoryButton(context)),
+                if (_showCategoryBack) ...[
+                  const SizedBox(width: 8),
+                  _buildCategoryBackButton(context),
+                ],
               ],
             ),
           ),
@@ -149,45 +158,54 @@ class CinemaTopBar extends StatelessWidget {
     );
   }
 
-  static final Expando<ThemeData> _darkMenuThemeCache = Expando<ThemeData>();
-
   Widget _buildCategoryButton(BuildContext context) {
+    final label = _categoryActive && activeCategoryTag.isNotEmpty
+        ? '分类 · $activeCategoryTag'
+        : '分类';
+    return _TopNavTabButton(
+      label: label,
+      active: _categoryActive,
+      onTap: onSelectCategory,
+    );
+  }
+
+  Widget _buildCategoryBackButton(BuildContext context) {
     final palette = CinemaPalette.of(context);
     final theme = Theme.of(context);
-    final label = _categoryActive ? '分类 · $selectedCategoryTag' : '分类';
-    final menuTheme = palette.isCinemaDark
-        ? (_darkMenuThemeCache[theme] ??= theme.copyWith(
-            colorScheme: theme.colorScheme.copyWith(
-              primary: palette.accent,
-              surfaceContainer: palette.panelSurface,
-              onSurface: palette.textPrimary,
+    return Semantics(
+      button: true,
+      label: '返回全部类别',
+      child: Material(
+        color: palette.isCinemaDark
+            ? Colors.white.withValues(alpha: 0.08)
+            : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(10),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onSelectCategory,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.arrow_back_rounded,
+                  size: 16,
+                  color: palette.textPrimary,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '全部类别',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: palette.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
-          ))
-        : theme;
-
-    return Theme(
-      data: menuTheme,
-      child: KazumiMenuButton(
-        animated: true,
-        style: MenuStyle(
-          maximumSize: const WidgetStatePropertyAll(Size(220, 360)),
-          backgroundColor: palette.isCinemaDark
-              ? WidgetStatePropertyAll(palette.panelSurface)
-              : null,
-        ),
-        menuChildren: [
-          for (final tag in tags)
-            KazumiMenuItem(
-              label: tag,
-              selected: _categoryActive && tag == selectedCategoryTag,
-              onPressed: () => onSelectCategoryTag(tag),
-            ),
-        ],
-        builder: (context, toggle) => _TopNavTabButton(
-          label: label,
-          active: _categoryActive,
-          trailingIcon: Icons.keyboard_arrow_down_rounded,
-          onTap: toggle,
+          ),
         ),
       ),
     );
@@ -199,13 +217,11 @@ class _TopNavTabButton extends StatelessWidget {
     required this.label,
     required this.active,
     required this.onTap,
-    this.trailingIcon,
   });
 
   final String label;
   final bool active;
   final VoidCallback? onTap;
-  final IconData? trailingIcon;
 
   @override
   Widget build(BuildContext context) {
@@ -230,29 +246,14 @@ class _TopNavTabButton extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 160),
-                      child: Text(
-                        label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: textStyle,
-                      ),
-                    ),
-                    if (trailingIcon != null) ...[
-                      const SizedBox(width: 2),
-                      Icon(
-                        trailingIcon,
-                        size: 18,
-                        color: active
-                            ? palette.textPrimary
-                            : palette.textSecondary,
-                      ),
-                    ],
-                  ],
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 160),
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: textStyle,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 AnimatedContainer(

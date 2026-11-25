@@ -21,6 +21,10 @@ class PopularCarouselStrip extends StatelessWidget {
     required this.controller,
     required this.height,
     this.label = '',
+    this.onLabelTap,
+    this.isLoading = false,
+    this.hasError = false,
+    this.onRetry,
     required this.onUserInteractionStart,
     required this.onUserInteractionEnd,
   });
@@ -29,6 +33,10 @@ class PopularCarouselStrip extends StatelessWidget {
   final ScrollController controller;
   final double height;
   final String label;
+  final VoidCallback? onLabelTap;
+  final bool isLoading;
+  final bool hasError;
+  final VoidCallback? onRetry;
   final VoidCallback onUserInteractionStart;
   final VoidCallback onUserInteractionEnd;
 
@@ -59,28 +67,40 @@ class PopularCarouselStrip extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (header.isNotEmpty) ...[
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Text(
-                  header,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: headerStyle,
+              if (onLabelTap != null)
+                Padding(
+                  padding: const EdgeInsets.only(left: 12, right: 12),
+                  child: _CategoryStripHeader(
+                    label: header,
+                    compact: compact,
+                    onTap: onLabelTap!,
+                  ),
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Text(
+                    header,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: headerStyle,
+                  ),
                 ),
-              ),
               SizedBox(height: compact ? 4 : 6),
             ],
             Expanded(
-              child: items.isEmpty
+              child: items.isEmpty && !isLoading
                   ? Center(
-                      child: Text(
-                        '暂无更多热门番剧',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colors.onSurfaceVariant,
-                        ),
-                      ),
+                      child: hasError
+                          ? _StripErrorState(onRetry: onRetry)
+                          : Text(
+                              '暂无更多热门番剧',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ),
                     )
                   : LayoutBuilder(
                       builder: (_, c) {
@@ -116,6 +136,28 @@ class PopularCarouselStrip extends StatelessWidget {
                         final fadeColor = theme.brightness == Brightness.dark
                             ? CinemaPalette.of(context).canvas
                             : theme.scaffoldBackgroundColor;
+                        if (items.isEmpty && isLoading) {
+                          final skeletonCount = math.max(
+                            3,
+                            ((viewportWidth - sidePadding * 2 + gap) /
+                                    (posterW + gap))
+                                .ceil(),
+                          );
+                          return SizedBox(
+                            width: viewportWidth,
+                            child: _viewportFade(
+                              fadeColor,
+                              _StripSkeletonRow(
+                                count: skeletonCount,
+                                posterSize: Size(posterW, posterH),
+                                reflectHeight: reflectH,
+                                gap: gap,
+                                sidePadding: sidePadding,
+                                vPad: vPad,
+                              ),
+                            ),
+                          );
+                        }
                         return SizedBox(
                           width: viewportWidth,
                           child: _viewportFade(
@@ -369,6 +411,8 @@ class _StripCardState extends State<_StripCard>
       width: size.width,
       height: size.height,
       borderRadius: BorderRadius.zero,
+      fadeOutDuration: Duration.zero,
+      fadeInDuration: const Duration(milliseconds: 80),
     );
     final titleBanner = titleSpace >= lineHeight
         ? Container(
@@ -619,3 +663,190 @@ BoxDecoration _stripSheen(
         stops: const [0.0, 0.24, 0.70, 1.0],
       ),
     );
+
+class _CategoryStripHeader extends StatefulWidget {
+  const _CategoryStripHeader({
+    required this.label,
+    required this.compact,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool compact;
+  final VoidCallback onTap;
+
+  @override
+  State<_CategoryStripHeader> createState() => _CategoryStripHeaderState();
+}
+
+class _CategoryStripHeaderState extends State<_CategoryStripHeader> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final palette = CinemaPalette.of(context);
+    final accent = palette.isCinemaDark
+        ? const Color(0xFFE4152A)
+        : theme.colorScheme.primary;
+    final textStyle = (widget.compact
+            ? theme.textTheme.titleSmall
+            : theme.textTheme.titleMedium)
+        ?.copyWith(
+          color: palette.textPrimary,
+          fontWeight: FontWeight.w700,
+          height: 1.2,
+        );
+
+    return Semantics(
+      button: true,
+      label: '${widget.label}，查看全部',
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: Material(
+          type: MaterialType.transparency,
+          borderRadius: BorderRadius.circular(8),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: widget.onTap,
+            hoverColor: Colors.transparent,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 140),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                color: _hovered
+                    ? (palette.isCinemaDark
+                          ? Colors.white.withValues(alpha: 0.08)
+                          : theme.colorScheme.primary.withValues(alpha: 0.08))
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 3,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      color: accent,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    widget.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: textStyle,
+                  ),
+                  AnimatedPadding(
+                    duration: const Duration(milliseconds: 140),
+                    padding: EdgeInsets.only(left: _hovered ? 4 : 2),
+                    child: Icon(
+                      Icons.chevron_right_rounded,
+                      size: widget.compact ? 18 : 20,
+                      color: _hovered ? accent : palette.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StripErrorState extends StatelessWidget {
+  const _StripErrorState({this.onRetry});
+
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '加载失败',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        if (onRetry != null) ...[
+          const SizedBox(width: 8),
+          TextButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh_rounded, size: 16),
+            label: const Text('重试'),
+            style: TextButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _StripSkeletonRow extends StatelessWidget {
+  const _StripSkeletonRow({
+    required this.count,
+    required this.posterSize,
+    required this.reflectHeight,
+    required this.gap,
+    required this.sidePadding,
+    required this.vPad,
+  });
+
+  final int count;
+  final Size posterSize;
+  final double reflectHeight;
+  final double gap;
+  final double sidePadding;
+  final double vPad;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fill = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Theme.of(context).colorScheme.surfaceContainerHighest.withValues(
+            alpha: 0.45,
+          );
+    final border = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.black.withValues(alpha: 0.05);
+
+    return IgnorePointer(
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        physics: const NeverScrollableScrollPhysics(),
+        padding: EdgeInsets.symmetric(horizontal: sidePadding, vertical: vPad),
+        itemCount: count,
+        separatorBuilder: (_, _) => SizedBox(width: gap),
+        itemBuilder: (_, _) => SizedBox(
+          width: posterSize.width,
+          height: posterSize.height + reflectHeight,
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: Container(
+              width: posterSize.width,
+              height: posterSize.height,
+              decoration: BoxDecoration(
+                color: fill,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: border, width: 0.85),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

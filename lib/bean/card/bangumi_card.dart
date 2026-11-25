@@ -11,59 +11,81 @@ class BangumiCardV extends StatelessWidget {
     required this.bangumiItem,
     this.canTap = true,
     this.enableHero = true,
+    this.coverWidth,
+    this.coverHeight,
   });
 
   final BangumiItem bangumiItem;
   final bool canTap;
   final bool enableHero;
+  final double? coverWidth;
+  final double? coverHeight;
+
+  String get _coverUrl {
+    for (final key in const ['large', 'common', 'medium', 'small', 'grid']) {
+      final url = bangumiItem.images[key]?.trim() ?? '';
+      if (url.isNotEmpty) return url;
+    }
+    return '';
+  }
+
+  Widget _buildCoverImage(double width, double height) {
+    final image = NetworkImgLayer(
+      src: _coverUrl,
+      width: width,
+      height: height,
+      fadeOutDuration: Duration.zero,
+      fadeInDuration: const Duration(milliseconds: 80),
+    );
+    if (!enableHero) return image;
+    return Hero(
+      transitionOnUserGestures: true,
+      flightShuttleBuilder: NetworkImgLayer.heroFlightShuttleBuilder,
+      tag: bangumiItem.id,
+      child: image,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    final hasKnownCoverSize =
+        coverWidth != null &&
+        coverHeight != null &&
+        coverWidth!.isFinite &&
+        coverHeight!.isFinite &&
+        coverWidth! > 0 &&
+        coverHeight! > 0;
+
     return Card(
       elevation: 0,
       clipBehavior: Clip.antiAlias,
       margin: EdgeInsets.zero,
-      child: GestureDetector(
-        child: InkWell(
-          onTap: () {
-            if (!canTap) {
-              KazumiDialog.showToast(
-                message: '编辑模式',
-              );
-              return;
-            }
-            context.pushNamed('/info/', arguments: bangumiItem);
-          },
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              AspectRatio(
-                aspectRatio: 0.65,
-                child: LayoutBuilder(builder: (context, boxConstraints) {
-                  final double maxWidth = boxConstraints.maxWidth;
-                  final double maxHeight = boxConstraints.maxHeight;
-                  return enableHero
-                      ? Hero(
-                          transitionOnUserGestures: true,
-                          flightShuttleBuilder:
-                              NetworkImgLayer.heroFlightShuttleBuilder,
-                          tag: bangumiItem.id,
-                          child: NetworkImgLayer(
-                            src: bangumiItem.images['large'] ?? '',
-                            width: maxWidth,
-                            height: maxHeight,
-                          ),
-                        )
-                      : NetworkImgLayer(
-                          src: bangumiItem.images['large'] ?? '',
-                          width: maxWidth,
-                          height: maxHeight,
-                        );
-                }),
-              ),
-              BangumiContent(bangumiItem: bangumiItem)
-            ],
-          ),
+      child: InkWell(
+        onTap: () {
+          if (!canTap) {
+            KazumiDialog.showToast(
+              message: '编辑模式',
+            );
+            return;
+          }
+          context.pushNamed('/info/', arguments: bangumiItem);
+        },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            AspectRatio(
+              aspectRatio: 0.65,
+              child: hasKnownCoverSize
+                  ? _buildCoverImage(coverWidth!, coverHeight!)
+                  : LayoutBuilder(
+                      builder: (context, boxConstraints) => _buildCoverImage(
+                        boxConstraints.maxWidth,
+                        boxConstraints.maxHeight,
+                      ),
+                    ),
+            ),
+            BangumiContent(bangumiItem: bangumiItem),
+          ],
         ),
       ),
     );
@@ -77,31 +99,25 @@ class BangumiContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ts = MediaQuery.textScalerOf(context);
+    final textScaler = MediaQuery.textScalerOf(context).clamp(
+      maxScaleFactor: 1.1,
+    );
+    final style = DefaultTextStyle.of(context).style.copyWith(
+          fontWeight: FontWeight.w500,
+          letterSpacing: 0.3,
+        );
 
     return Expanded(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(5, 3, 5, 1),
-        child: LayoutBuilder(builder: (context, constraints) {
-          final style = DefaultTextStyle.of(context).style.copyWith(
-                fontWeight: FontWeight.w500,
-                letterSpacing: 0.3,
-              );
-          final textScaler = ts.clamp(maxScaleFactor: 1.1);
-          final lineHeight =
-              textScaler.scale(style.fontSize ?? 14.0) * (style.height ?? 1.0);
-          final lines = lineHeight > 0
-              ? (constraints.maxHeight / lineHeight).floor().clamp(1, 3)
-              : 1;
-          return Text(
-            bangumiItem.nameCn,
-            textAlign: TextAlign.start,
-            style: style,
-            textScaler: textScaler,
-            maxLines: lines,
-            overflow: TextOverflow.ellipsis,
-          );
-        }),
+        child: Text(
+          bangumiItem.nameCn,
+          textAlign: TextAlign.start,
+          style: style,
+          textScaler: textScaler,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
       ),
     );
   }
