@@ -53,6 +53,7 @@ class _CategoryOverviewViewState extends State<CategoryOverviewView>
   Size? _lastPhysicalSize;
   Timer? _resizeResumeTimer;
   bool _viewportUpdatePending = false;
+  bool _opacityResetPending = false;
   bool _appResumed = true;
   bool _tickerEnabled = true;
   bool _reduceMotion = false;
@@ -190,10 +191,33 @@ class _CategoryOverviewViewState extends State<CategoryOverviewView>
     return _rowOpacities.putIfAbsent(tag, () => ValueNotifier<double>(1.0));
   }
 
+  bool get _isInPersistentCallbacks =>
+      SchedulerBinding.instance.schedulerPhase ==
+      SchedulerPhase.persistentCallbacks;
+
+  void _scheduleOpacityReset() {
+    if (_opacityResetPending || _disposed) return;
+    _opacityResetPending = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _opacityResetPending = false;
+      if (!mounted || _disposed) return;
+      for (final entry in _rowOpacities.entries) {
+        if (_resettingTags.contains(entry.key)) continue;
+        if (entry.value.value != 1.0) {
+          entry.value.value = 1.0;
+        }
+      }
+    });
+  }
+
   void _registerRow(_MountedOverviewRow row) {
     final opacity = _rowOpacities[row.tag];
     if (opacity != null && opacity.value != 1.0) {
-      opacity.value = 1.0;
+      if (_isInPersistentCallbacks) {
+        _scheduleOpacityReset();
+      } else {
+        opacity.value = 1.0;
+      }
     }
     _mountedRows[row.tag] = row;
     _scheduleViewportUpdate();
@@ -205,12 +229,15 @@ class _CategoryOverviewViewState extends State<CategoryOverviewView>
       _mountedRows.remove(tag);
       _visibleTags.remove(tag);
       _interactingTags.remove(tag);
-      // Only cancel timers during dispose/finalizeTree; avoid mutating
-      // ValueNotifier while its child ValueListenableBuilder is still
-      // unmounting in the same locked tree pass.
+      // Only cancel timers during dispose/finalizeTree; defer ValueNotifier
+      // resets to a post-frame callback so unmounting rows never trigger
+      // ValueListenableBuilder.setState() while the widget tree is locked.
       _resetTimers.remove(tag)?.cancel();
       _resettingTags.remove(tag);
-      _syncTicker();
+      if (_rowOpacities[tag]?.value != 1.0) {
+        _scheduleOpacityReset();
+      }
+      _syncTicker(deferOpacityReset: true);
     }
   }
 
@@ -300,7 +327,7 @@ class _CategoryOverviewViewState extends State<CategoryOverviewView>
     return max.isFinite && max > 0.5;
   }
 
-  void _syncTicker() {
+  void _syncTicker({bool deferOpacityReset = false}) {
     if (_disposed) return;
     final shouldRun =
         _canAutoScroll && _mountedRows.values.any(_canScrollRow);
@@ -312,7 +339,9 @@ class _CategoryOverviewViewState extends State<CategoryOverviewView>
         _ticker.stop();
         _lastTick = null;
       }
-      _cancelAllPendingResets();
+      _cancelAllPendingResets(
+        deferOpacityReset: deferOpacityReset || _isInPersistentCallbacks,
+      );
     }
   }
 
@@ -321,16 +350,26 @@ class _CategoryOverviewViewState extends State<CategoryOverviewView>
     _resettingTags.remove(tag);
     final opacity = _rowOpacities[tag];
     if (opacity != null && opacity.value != 1.0) {
-      opacity.value = 1.0;
+      if (_isInPersistentCallbacks) {
+        _scheduleOpacityReset();
+      } else {
+        opacity.value = 1.0;
+      }
     }
   }
 
-  void _cancelAllPendingResets() {
+  void _cancelAllPendingResets({bool deferOpacityReset = false}) {
     for (final timer in _resetTimers.values) {
       timer.cancel();
     }
     _resetTimers.clear();
     _resettingTags.clear();
+    if (deferOpacityReset || _isInPersistentCallbacks) {
+      if (_rowOpacities.values.any((opacity) => opacity.value != 1.0)) {
+        _scheduleOpacityReset();
+      }
+      return;
+    }
     for (final opacity in _rowOpacities.values) {
       if (opacity.value != 1.0) {
         opacity.value = 1.0;

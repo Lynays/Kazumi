@@ -237,6 +237,99 @@ void main() {
         expect(t.takeException(), isNull);
       },
     );
+
+    testWidgets(
+      'disposing or covering a row mid-fade-out reset does not notify ValueListenableBuilder while tree is locked',
+      (t) async {
+        t.view.physicalSize = const Size(1280, 640);
+        t.view.devicePixelRatio = 1.0;
+        addTearDown(t.view.reset);
+
+        final controller = CategoryController(
+          tags: const ['日常'],
+          mirrorEnabledProvider: () => true,
+          pageFetcher: ({
+            required tag,
+            required limit,
+            required offset,
+            required useMirror,
+          }) async {
+            return CategoryPageResult(
+              items: List.generate(18, (i) => _item(i + 1, tag)),
+              rawCount: 18,
+              failed: false,
+            );
+          },
+        );
+        addTearDown(controller.dispose);
+        controller.openCategoryOverview();
+
+        Widget buildHost({required bool showOverview, required bool covered}) =>
+            MaterialApp(
+              theme: ThemeData(brightness: Brightness.dark, useMaterial3: true),
+              home: RouteVisibility(
+                isCovered: covered,
+                child: Scaffold(
+                  body: showOverview
+                      ? CategoryOverviewView(
+                          controller: controller,
+                          viewportHeight: 640,
+                        )
+                      : const SizedBox.shrink(),
+                ),
+              ),
+            );
+
+        await t.pumpWidget(buildHost(showOverview: true, covered: false));
+        await t.pump();
+        await t.pump(const Duration(milliseconds: 50));
+
+        // Jump the single visible row right to the end so the next tick starts
+        // the 180ms fade-out reset (opacity -> 0.0).
+        final strip = t.widget<PopularCarouselStrip>(
+          find.byType(PopularCarouselStrip).first,
+        );
+        strip.controller.jumpTo(strip.controller.position.maxScrollExtent - 0.1);
+        await t.pump(const Duration(milliseconds: 30));
+        await t.pump(const Duration(milliseconds: 30));
+
+        final fadingOpacity = t.widget<AnimatedOpacity>(
+          find.byType(AnimatedOpacity).first,
+        );
+        expect(fadingOpacity.opacity, 0.0);
+
+        // Cover route during build/didChangeDependencies while opacity is 0.0.
+        await t.pumpWidget(buildHost(showOverview: true, covered: true));
+        await t.pump();
+        expect(t.takeException(), isNull);
+        expect(
+          t.widget<AnimatedOpacity>(find.byType(AnimatedOpacity).first).opacity,
+          1.0,
+        );
+
+        // Trigger another fade-out reset, then unmount the whole view during
+        // finalizeTree while opacity is still 0.0.
+        await t.pumpWidget(buildHost(showOverview: true, covered: false));
+        await t.pump();
+        await t.pump(const Duration(milliseconds: 50));
+        final strip2 = t.widget<PopularCarouselStrip>(
+          find.byType(PopularCarouselStrip).first,
+        );
+        strip2.controller.jumpTo(
+          strip2.controller.position.maxScrollExtent - 0.1,
+        );
+        await t.pump(const Duration(milliseconds: 30));
+        await t.pump(const Duration(milliseconds: 30));
+        expect(
+          t.widget<AnimatedOpacity>(find.byType(AnimatedOpacity).first).opacity,
+          0.0,
+        );
+
+        await t.pumpWidget(buildHost(showOverview: false, covered: false));
+        await t.pump();
+        expect(t.takeException(), isNull);
+      },
+    );
   });
 }
 
