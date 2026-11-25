@@ -133,7 +133,12 @@ class CategoryController extends ChangeNotifier {
   final List<String> _pendingQueue = <String>[];
   final Set<String> _priorityTags = <String>{};
   final Set<String> _inFlightTags = <String>{};
+  final Map<String, int> _inFlightGenerations = <String, int>{};
+  final Map<String, bool> _inFlightUseMirror = <String, bool>{};
   final Map<String, Completer<void>> _pendingCompleters =
+      <String, Completer<void>>{};
+  final Map<String, bool> _replacementHighPriority = <String, bool>{};
+  final Map<String, Completer<void>> _replacementCompleters =
       <String, Completer<void>>{};
 
   List<String> get tags => _tags;
@@ -257,10 +262,7 @@ class CategoryController extends ChangeNotifier {
   Future<void> ensureRowLoaded(String tag) {
     if (_disposed || tag.isEmpty) return Future<void>.value();
     final feed = _syncAccelerationMode(tag);
-    if (feed.items.isNotEmpty ||
-        feed.isExhausted ||
-        feed.hasError ||
-        _inFlightTags.contains(tag)) {
+    if (feed.items.isNotEmpty || feed.isExhausted || feed.hasError) {
       return _pendingCompleters[tag]?.future ?? Future<void>.value();
     }
     return _enqueueFetch(tag, highPriority: false);
@@ -268,7 +270,22 @@ class CategoryController extends ChangeNotifier {
 
   /// Drops an unstarted overview row request when that row scrolls out of view.
   void cancelPendingRowLoad(String tag) {
-    if (_disposed || _priorityTags.contains(tag) || _inFlightTags.contains(tag)) {
+    if (_disposed || _priorityTags.contains(tag)) {
+      return;
+    }
+    if (_inFlightTags.contains(tag)) {
+      final hadReplacement = _replacementHighPriority.remove(tag) != null;
+      final replacementCompleter = _replacementCompleters.remove(tag);
+      if (replacementCompleter != null && !replacementCompleter.isCompleted) {
+        replacementCompleter.complete();
+      }
+      if (hadReplacement) {
+        final current = _feeds[tag];
+        if (current != null && current.isLoading) {
+          _feeds[tag] = current.copyWith(isLoading: false);
+          _notifySafe();
+        }
+      }
       return;
     }
     final removed = _pendingQueue.remove(tag);
@@ -288,7 +305,7 @@ class CategoryController extends ChangeNotifier {
   Future<void> retryTag(String tag) {
     if (_disposed || tag.isEmpty) return Future<void>.value();
     final current = _syncAccelerationMode(tag);
-    if (_inFlightTags.contains(tag)) {
+    if (_isInFlightCurrent(tag)) {
       return _pendingCompleters[tag]?.future ?? Future<void>.value();
     }
     if (current.hasError) {
@@ -318,7 +335,7 @@ class CategoryController extends ChangeNotifier {
     if (feed.isExhausted) {
       return Future<void>.value();
     }
-    if (_inFlightTags.contains(tag)) {
+    if (_isInFlightCurrent(tag)) {
       return _pendingCompleters[tag]?.future ?? Future<void>.value();
     }
     if (feed.hasError) {
@@ -329,12 +346,21 @@ class CategoryController extends ChangeNotifier {
     return _enqueueFetch(tag, highPriority: true);
   }
 
+  bool _isInFlightCurrent(String tag) {
+    return _inFlightTags.contains(tag) &&
+        _inFlightGenerations[tag] == (_feedGenerations[tag] ?? 0);
+  }
+
   /// Resets the tag feed when the user toggled Bangumi acceleration mode so
   /// mirror offsets and official Bangumi offsets are never mixed.
   CategoryTagFeed _syncAccelerationMode(String tag) {
     final current = feedFor(tag);
     final useMirror = _mirrorEnabledProvider();
-    if (current.lastUseMirror != null && current.lastUseMirror != useMirror) {
+    final inFlightMode = _isInFlightCurrent(tag) ? _inFlightUseMirror[tag] : null;
+    final modeChanged =
+        (current.lastUseMirror != null && current.lastUseMirror != useMirror) ||
+        (inFlightMode != null && inFlightMode != useMirror);
+    if (modeChanged) {
       _feedGenerations[tag] = (_feedGenerations[tag] ?? 0) + 1;
       _seenIds[tag] = <int>{};
       final reset = CategoryTagFeed(tag: tag);
@@ -346,11 +372,33 @@ class CategoryController extends ChangeNotifier {
     return current;
   }
 
-  Future<void> _enqueueFetch(String tag, {required bool highPriority}) {
-    final existingCompleter = _pendingCompleters[tag];
-    if (_inFlightTags.contains(tag)) {
-      return existingCompleter?.future ?? Future<void>.value();
+  Future<void> _scheduleStaleReplacement(
+    String tag, {
+    required bool highPriority,
+  }) {
+    _replacementHighPriority[tag] =
+        (_replacementHighPriority[tag] ?? false) || highPriority;
+    final completer = _replacementCompleters.putIfAbsent(
+      tag,
+      Completer<void>.new,
+    );
+    final current = feedFor(tag);
+    if (!current.isLoading || current.hasError) {
+      _feeds[tag] = current.copyWith(isLoading: true, hasError: false);
+      _notifySafe();
     }
+    return completer.future;
+  }
+
+  Future<void> _enqueueFetch(String tag, {required bool highPriority}) {
+    if (_inFlightTags.contains(tag)) {
+      if (_isInFlightCurrent(tag)) {
+        return _pendingCompleters[tag]?.future ?? Future<void>.value();
+      }
+      return _scheduleStaleReplacement(tag, highPriority: highPriority);
+    }
+
+    final existingCompleter = _pendingCompleters[tag];
 
     _pendingQueue.remove(tag);
     if (highPriority) {
@@ -394,6 +442,8 @@ class CategoryController extends ChangeNotifier {
     final feed = _syncAccelerationMode(tag);
     final generation = _feedGenerations[tag] ?? 0;
     final offset = feed.nextRawOffset;
+    _inFlightGenerations[tag] = generation;
+    _inFlightUseMirror[tag] = useMirror;
 
     if (!feed.isLoading || feed.hasError) {
       _feeds[tag] = feed.copyWith(isLoading: true, hasError: false);
@@ -417,7 +467,11 @@ class CategoryController extends ChangeNotifier {
     }
 
     _inFlightTags.remove(tag);
+    _inFlightGenerations.remove(tag);
+    _inFlightUseMirror.remove(tag);
     final completer = _pendingCompleters.remove(tag);
+    final replacementHighPriority = _replacementHighPriority.remove(tag);
+    final replacementCompleter = _replacementCompleters.remove(tag);
     final stillCurrent = !_disposed && (_feedGenerations[tag] ?? 0) == generation;
 
     if (stillCurrent) {
@@ -469,7 +523,20 @@ class CategoryController extends ChangeNotifier {
     }
 
     if (!_disposed) {
-      _pumpQueue();
+      if (replacementHighPriority != null) {
+        if (replacementCompleter != null && !replacementCompleter.isCompleted) {
+          _pendingCompleters[tag] = replacementCompleter;
+        }
+        unawaited(_enqueueFetch(tag, highPriority: replacementHighPriority));
+      } else {
+        if (replacementCompleter != null && !replacementCompleter.isCompleted) {
+          replacementCompleter.complete();
+        }
+        _pumpQueue();
+      }
+    } else if (replacementCompleter != null &&
+        !replacementCompleter.isCompleted) {
+      replacementCompleter.complete();
     }
   }
 
@@ -503,12 +570,21 @@ class CategoryController extends ChangeNotifier {
     _disposed = true;
     _pendingQueue.clear();
     _priorityTags.clear();
+    _inFlightGenerations.clear();
+    _inFlightUseMirror.clear();
+    _replacementHighPriority.clear();
     for (final completer in _pendingCompleters.values) {
       if (!completer.isCompleted) {
         completer.complete();
       }
     }
     _pendingCompleters.clear();
+    for (final completer in _replacementCompleters.values) {
+      if (!completer.isCompleted) {
+        completer.complete();
+      }
+    }
+    _replacementCompleters.clear();
     super.dispose();
   }
 }

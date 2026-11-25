@@ -269,6 +269,161 @@ void main() {
       expect(resolved!.tags, defaultAnimeTags);
       expect(t.takeException(), isNull);
     });
+
+    test(
+      'queues a new-generation replacement fetch when acceleration toggles during an in-flight detail page',
+      () async {
+        var useMirror = false;
+        final requests = <(String, int, bool)>[];
+        final stalePage2Gate = Completer<CategoryPageResult>();
+        final replacementGate = Completer<CategoryPageResult>();
+
+        final controller = CategoryController(
+          mirrorEnabledProvider: () => useMirror,
+          pageFetcher: ({
+            required tag,
+            required limit,
+            required offset,
+            required useMirror,
+          }) async {
+            requests.add((tag, offset, useMirror));
+            if (!useMirror && offset == 0) {
+              return CategoryPageResult(
+                items: List.generate(24, (i) => _item(i + 1)),
+                rawCount: 24,
+                failed: false,
+              );
+            }
+            if (!useMirror && offset == 24) {
+              return stalePage2Gate.future;
+            }
+            return replacementGate.future;
+          },
+        );
+
+        // 1. Populate page 1 under direct mode.
+        await controller.loadMoreDetail('日常');
+        expect(controller.feedFor('日常').items.length, 24);
+        expect(controller.feedFor('日常').lastUseMirror, isFalse);
+
+        // 2. Start page 2 (in-flight under direct mode).
+        final stalePage2Future = controller.loadMoreDetail('日常');
+        expect(controller.inFlightCount, 1);
+
+        // 3. Toggle acceleration mode while page 2 is still in-flight and reopen detail.
+        useMirror = true;
+        controller.openCategoryDetail('日常');
+        final resetFeed = controller.feedFor('日常');
+        expect(resetFeed.items, isEmpty);
+        expect(resetFeed.isLoading, isTrue);
+        expect(resetFeed.hasError, isFalse);
+
+        // Additional detail loadMore calls while stale drains share the replacement future.
+        var replacementResolved = false;
+        final replacementFuture = controller
+            .loadMoreDetail('日常')
+            .whenComplete(() => replacementResolved = true);
+
+        // 4. Stale page 2 finishes -> discarded, replacement mirror fetch dispatches immediately.
+        stalePage2Gate.complete(
+          CategoryPageResult(
+            items: List.generate(24, (i) => _item(100 + i)),
+            rawCount: 24,
+            failed: false,
+          ),
+        );
+        await stalePage2Future;
+        await Future<void>.delayed(Duration.zero);
+
+        expect(replacementResolved, isFalse);
+        expect(requests, [
+          ('日常', 0, false),
+          ('日常', 24, false),
+          ('日常', 0, true),
+        ]);
+        expect(controller.feedFor('日常').items, isEmpty);
+        expect(controller.feedFor('日常').isLoading, isTrue);
+
+        // 5. Replacement mirror fetch completes -> feed populated cleanly.
+        replacementGate.complete(
+          CategoryPageResult(
+            items: List.generate(12, (i) => _item(500 + i + 1)),
+            rawCount: 12,
+            failed: false,
+          ),
+        );
+        await replacementFuture;
+
+        final finalFeed = controller.feedFor('日常');
+        expect(replacementResolved, isTrue);
+        expect(finalFeed.items.length, 12);
+        expect(finalFeed.items.first.id, 501);
+        expect(finalFeed.lastUseMirror, isTrue);
+        expect(finalFeed.isLoading, isFalse);
+        expect(finalFeed.hasError, isFalse);
+
+        controller.dispose();
+      },
+    );
+
+    test(
+      'queues and can cancel a stale overview replacement fetch when acceleration toggles mid-load',
+      () async {
+        var useMirror = false;
+        final requests = <(String, int, bool)>[];
+        final staleGate = Completer<CategoryPageResult>();
+
+        final controller = CategoryController(
+          mirrorEnabledProvider: () => useMirror,
+          pageFetcher: ({
+            required tag,
+            required limit,
+            required offset,
+            required useMirror,
+          }) async {
+            requests.add((tag, offset, useMirror));
+            if (!useMirror) {
+              return staleGate.future;
+            }
+            return CategoryPageResult(
+              items: [_item(901)],
+              rawCount: 1,
+              failed: false,
+            );
+          },
+        );
+
+        final firstLoad = controller.ensureRowLoaded('恋爱');
+        expect(controller.inFlightCount, 1);
+
+        // Toggle acceleration while first overview fetch is still in-flight.
+        useMirror = true;
+        final replacement = controller.ensureRowLoaded('恋爱');
+        expect(controller.feedFor('恋爱').isLoading, isTrue);
+
+        // Scrolling the overview row away cancels the queued replacement cleanly.
+        controller.cancelPendingRowLoad('恋爱');
+        await replacement;
+        expect(controller.feedFor('恋爱').isLoading, isFalse);
+
+        // When the stale request finishes, it is discarded and no replacement runs.
+        staleGate.complete(
+          CategoryPageResult(
+            items: [_item(1)],
+            rawCount: 1,
+            failed: false,
+          ),
+        );
+        await firstLoad;
+        await Future<void>.delayed(Duration.zero);
+
+        expect(requests, [('恋爱', 0, false)]);
+        expect(controller.feedFor('恋爱').items, isEmpty);
+        expect(controller.feedFor('恋爱').isLoading, isFalse);
+
+        controller.dispose();
+      },
+    );
   });
 }
 
