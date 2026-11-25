@@ -199,7 +199,7 @@ class _PopularRankMosaicState extends State<PopularRankMosaic> {
   }
 }
 
-class _MosaicTile extends StatelessWidget {
+class _MosaicTile extends StatefulWidget {
   const _MosaicTile({
     required this.item,
     required this.rank,
@@ -219,20 +219,68 @@ class _MosaicTile extends StatelessWidget {
   final ValueChanged<bool> onHover;
 
   @override
+  State<_MosaicTile> createState() => _MosaicTileState();
+}
+
+class _MosaicTileState extends State<_MosaicTile>
+    with SingleTickerProviderStateMixin {
+  AnimationController? _hoverController;
+  bool _reduceMotion = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final nextReduce = MediaQuery.disableAnimationsOf(context);
+    if (_reduceMotion != nextReduce) {
+      _reduceMotion = nextReduce;
+      if (_reduceMotion && _hoverController != null) {
+        _hoverController!.value = 0.0;
+      }
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _MosaicTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.hovered != widget.hovered && !_reduceMotion) {
+      if (widget.hovered) {
+        final controller = _hoverController ??= AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 200),
+          reverseDuration: const Duration(milliseconds: 200),
+        );
+        controller.forward();
+      } else {
+        _hoverController?.reverse();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _hoverController?.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final item = widget.item;
+    final rank = widget.rank;
+    final size = widget.size;
+    final hovered = widget.hovered;
+    final anyHovered = widget.anyHovered;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardEffectsScale = VisualEffectsConfig.of(context).cardEffectsScale;
     final cn = item.nameCn.trim();
     final raw = item.name.trim();
     final title = cn.isNotEmpty ? cn : (raw.isNotEmpty ? raw : '未知番剧');
+    final tier = rank == 2 ? 0 : (rank <= 6 ? 1 : 2);
     final cover = _mosaicCover(item);
     final tiny = size.width < 58 || size.height < 52;
-    final reduceMotion = MediaQuery.disableAnimationsOf(context);
     final radius = BorderRadius.circular(14);
-    final tier = rank == 2 ? 0 : (rank <= 6 ? 1 : 2);
     final leadCaption = tier == 0 && size.width >= 120 && size.height >= 120;
     final summary = leadCaption
-        ? item.summary.replaceAll(_whitespacePattern, ' ').trim()
+        ? item.summary.replaceAll(_MosaicTile._whitespacePattern, ' ').trim()
         : '';
     final rankFontSize = tiny ? 10.0 : (tier == 2 ? 12.0 : 16.0);
     final titleFontSize = leadCaption
@@ -255,178 +303,192 @@ class _MosaicTile extends StatelessWidget {
     final dimAlpha = (!hovered && anyHovered && isDark)
         ? (baseDim + 0.10).clamp(0.0, 0.28)
         : baseDim;
-    final animDur = reduceMotion
-        ? Duration.zero
-        : const Duration(milliseconds: 200);
+
+    final posterImage = NetworkImgLayer(
+      src: cover,
+      width: size.width,
+      height: size.height,
+      borderRadius: BorderRadius.zero,
+      fadeOutDuration: Duration.zero,
+      fadeInDuration: const Duration(milliseconds: 80),
+    );
+
+    final captionBanner = showTitle
+        ? Container(
+            padding: EdgeInsets.fromLTRB(
+              10,
+              captionPadding,
+              10,
+              8,
+            ),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.bottomCenter,
+                end: Alignment.topCenter,
+                colors: [
+                  Color(0xF408080D),
+                  Color(0x9C08080D),
+                  Color(0x0008080D),
+                ],
+                stops: [0.0, 0.50, 1.0],
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: titleLines,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: titleFontSize,
+                    fontWeight: leadCaption
+                        ? FontWeight.w600
+                        : FontWeight.w500,
+                    height: 1.2,
+                  ),
+                ),
+                if (showSummary)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      summary,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xD9F6F1FA),
+                        fontSize: 13,
+                        height: 1.2,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          )
+        : null;
+
+    final rankBadge = Positioned(
+      top: 4,
+      left: tiny ? 4 : 6,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: tiny ? 4 : 8,
+          vertical: 2,
+        ),
+        decoration: BoxDecoration(
+          color: const Color(0xB80A090E),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text(
+          '#$rank',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: rankFontSize,
+            height: 1.2,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
 
     return Semantics(
       button: true,
       label: '热门第 $rank 名，$title',
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
-        onEnter: (_) => onHover(true),
-        onExit: (_) => onHover(false),
-        child: AnimatedContainer(
-          duration: animDur,
-          curve: Curves.easeOutCubic,
-          transformAlignment: Alignment.center,
-          transform: hovered && !reduceMotion
-              ? (Matrix4.identity()
-                  ..setEntry(3, 2, 0.0014)
-                  ..rotateX(-0.06))
-              : Matrix4.identity(),
-          child: AnimatedScale(
-            scale: hovered && !reduceMotion ? 1.20 : 1.0,
-            duration: animDur,
-            curve: Curves.easeOutCubic,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                borderRadius: radius,
-                boxShadow: _tileShadows(
-                  isDark,
-                  hovered,
-                  tier,
-                  cardEffectsScale,
+        onEnter: (_) => widget.onHover(true),
+        onExit: (_) => widget.onHover(false),
+        child: AnimatedBuilder(
+          animation: _hoverController ?? kAlwaysDismissedAnimation,
+          child: posterImage,
+          builder: (context, child) {
+            final rawT = _reduceMotion
+                ? 0.0
+                : (_hoverController?.value ?? 0.0);
+            final t = rawT == 0.0 ? 0.0 : Curves.easeOutCubic.transform(rawT);
+            final scale = 1.0 + 0.20 * t;
+            final transform = t == 0.0
+                ? Matrix4.identity()
+                : (Matrix4.identity()
+                    ..setEntry(3, 2, 0.0014)
+                    ..rotateX(-0.06 * t)
+                    ..scaleByDouble(scale, scale, 1.0, 1.0));
+            final captionOpacity = _reduceMotion
+                ? (hovered ? 0.0 : 1.0)
+                : (1.0 - (rawT / 0.7).clamp(0.0, 1.0));
+            final effectiveDimOpacity = _reduceMotion
+                ? (hovered ? 0.0 : dimAlpha)
+                : dimAlpha * (1.0 - t);
+            final hoverVisual = _reduceMotion ? hovered : rawT > 0.5;
+
+            return Transform(
+              alignment: Alignment.center,
+              transform: transform,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: radius,
+                  boxShadow: _tileShadows(
+                    isDark,
+                    hoverVisual,
+                    tier,
+                    cardEffectsScale,
+                  ),
                 ),
-              ),
-              child: ClipRRect(
-                borderRadius: radius,
-                child: Material(
-                  type: MaterialType.transparency,
-                  child: InkWell(
-                    borderRadius: radius,
-                    hoverColor: Colors.transparent,
-                    onTap: () => context.pushNamed('/info/', arguments: item),
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        NetworkImgLayer(
-                          src: cover,
-                          width: size.width,
-                          height: size.height,
-                          borderRadius: BorderRadius.zero,
-                        ),
-                          if (dimAlpha > 0)
+                child: ClipRRect(
+                  borderRadius: radius,
+                  child: Material(
+                    type: MaterialType.transparency,
+                    child: InkWell(
+                      borderRadius: radius,
+                      hoverColor: Colors.transparent,
+                      onTap: () =>
+                          context.pushNamed('/info/', arguments: item),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          child!,
+                          if (effectiveDimOpacity > 0.001)
                             IgnorePointer(
-                              child: AnimatedOpacity(
-                                opacity: hovered ? 0.0 : dimAlpha,
-                                duration: reduceMotion
-                                    ? Duration.zero
-                                    : const Duration(milliseconds: 180),
-                                child: const ColoredBox(
-                                  color: Color(0xFF07090C),
+                              child: ColoredBox(
+                                color: const Color(0xFF07090C).withValues(
+                                  alpha: effectiveDimOpacity,
                                 ),
                               ),
                             ),
-                          if (showTitle)
+                          if (captionBanner != null && captionOpacity > 0.001)
                             Positioned(
                               left: 0,
                               right: 0,
                               bottom: 0,
-                              child: AnimatedOpacity(
-                                opacity: hovered ? 0.0 : 1.0,
-                                duration: reduceMotion
-                                    ? Duration.zero
-                                    : const Duration(milliseconds: 140),
-                                child: Container(
-                                  padding: EdgeInsets.fromLTRB(
-                                    10,
-                                    captionPadding,
-                                    10,
-                                    8,
-                                  ),
-                                  decoration: const BoxDecoration(
-                                    gradient: LinearGradient(
-                                      begin: Alignment.bottomCenter,
-                                      end: Alignment.topCenter,
-                                      colors: [
-                                        Color(0xF408080D),
-                                        Color(0x9C08080D),
-                                        Color(0x0008080D),
-                                      ],
-                                      stops: [0.0, 0.50, 1.0],
+                              child: captionOpacity >= 0.999
+                                  ? captionBanner
+                                  : Opacity(
+                                      opacity: captionOpacity,
+                                      child: captionBanner,
                                     ),
-                                  ),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        title,
-                                        maxLines: titleLines,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: titleFontSize,
-                                          fontWeight: leadCaption
-                                              ? FontWeight.w600
-                                              : FontWeight.w500,
-                                          height: 1.2,
-                                        ),
-                                      ),
-                                      if (showSummary)
-                                        Padding(
-                                          padding: const EdgeInsets.only(
-                                            top: 4,
-                                          ),
-                                          child: Text(
-                                            summary,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              color: Color(0xD9F6F1FA),
-                                              fontSize: 13,
-                                              height: 1.2,
-                                            ),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
+                            ),
+                          rankBadge,
+                          if (cardEffectsScale > 0)
+                            IgnorePointer(
+                              child: DecoratedBox(
+                                decoration: _tileSheen(
+                                  isDark,
+                                  hoverVisual,
+                                  tier,
+                                  cardEffectsScale,
                                 ),
                               ),
                             ),
-                          Positioned(
-                            top: 4,
-                            left: tiny ? 4 : 6,
-                            child: Container(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: tiny ? 4 : 8,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xB80A090E),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Text(
-                                '#$rank',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: rankFontSize,
-                                  height: 1.2,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                          ),
-                        if (cardEffectsScale > 0)
-                          IgnorePointer(
-                            child: DecoratedBox(
-                              decoration: _tileSheen(
-                                isDark,
-                                hovered,
-                                tier,
-                                cardEffectsScale,
-                              ),
-                            ),
-                          ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ),
+            );
+          },
         ),
       ),
     );

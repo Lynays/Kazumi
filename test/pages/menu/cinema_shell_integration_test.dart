@@ -13,6 +13,9 @@ import 'package:kazumi/pages/menu/cinema_navigation_bars.dart';
 import 'package:kazumi/pages/menu/cinema_search_bar.dart';
 import 'package:kazumi/pages/menu/cinema_top_bar.dart';
 import 'package:kazumi/pages/menu/menu.dart';
+import 'package:kazumi/pages/popular/category_controller.dart';
+import 'package:kazumi/pages/popular/category_detail_view.dart';
+import 'package:kazumi/pages/popular/category_overview_view.dart';
 import 'package:kazumi/pages/popular/popular_controller.dart';
 import 'package:kazumi/pages/popular/popular_dashboard.dart';
 import 'package:kazumi/pages/popular/popular_page.dart';
@@ -50,9 +53,11 @@ void main() {
 
   group('Cinema Shell Integration (CS-05)', () {
     testWidgets(
-      'landscape dark shell supports 3-tab toggle-to-home, category dropdown, search params, history, and close deduplication',
+      'landscape dark shell supports 3-tab toggle-to-home, category overview/detail navigation, search params, history, and close deduplication',
       (t) async {
         final popularController = _FakePopularController();
+        final categoryController = _createFakeCategoryController();
+        addTearDown(categoryController.dispose);
         final historyRepo = _FakeSearchHistoryRepository([
           SearchHistory('葬送的芙莉莲', 100),
         ]);
@@ -64,6 +69,7 @@ void main() {
           size: const Size(1280, 800),
           brightness: Brightness.dark,
           popularController: popularController,
+          categoryController: categoryController,
           historyRepository: historyRepo,
           onSearchRoute: (uri) => lastSearchUri = uri,
           onHistoryRoute: () => historyOpened = true,
@@ -134,26 +140,63 @@ void main() {
         await t.pump(const Duration(milliseconds: 250));
         expect(find.byType(PopularDashboard), findsOneWidget);
 
-        // Open category dropdown: must NOT contain '热门番组', selecting '日常'
-        // switches to tag grid and updates label to '分类 · 日常'.
+        // Tap '分类' in top bar: no dropdown menu, enters CategoryOverviewView directly.
         await t.tap(find.text('分类'));
         await t.pump();
-        await t.pump(const Duration(milliseconds: 300));
+        await t.pump(const Duration(milliseconds: 250));
         expect(find.text('热门番组'), findsNothing);
-        await t.tap(find.text('日常').last);
-        await t.pump();
-        await t.pump(const Duration(milliseconds: 300));
+        expect(find.byType(CategoryOverviewView), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('top-nav-indicator-分类-true')),
+          findsOneWidget,
+        );
 
-        expect(popularController.currentTag, '日常');
+        // Scroll overview down slightly, then tap '日常' label -> enters CategoryDetailView.
+        await t.drag(
+          find.byKey(const ValueKey('category-overview-scroll')),
+          const Offset(0, -120),
+        );
+        await t.pump();
+        final savedOverviewOffset = categoryController.overviewScrollOffset;
+        expect(savedOverviewOffset, greaterThan(0));
+
+        await t.drag(
+          find.byKey(const ValueKey('category-overview-scroll')),
+          const Offset(0, 120),
+        );
+        await t.pump();
+
+        await t.tap(find.text('日常').first);
+        await t.pump();
+        await t.pump(const Duration(milliseconds: 250));
+
+        expect(categoryController.mode, PopularBrowseMode.categoryDetail);
+        expect(categoryController.activeTag, '日常');
+        expect(find.byType(CategoryDetailView), findsOneWidget);
         expect(find.text('分类 · 日常'), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byType(CinemaTopBar),
+            matching: find.text('全部类别'),
+          ),
+          findsOneWidget,
+        );
         expect(
           find.byKey(const ValueKey('top-nav-indicator-分类 · 日常-true')),
           findsOneWidget,
         );
         expect(find.byType(SliverGrid), findsOneWidget);
 
+        // Tap top bar '全部类别' back button -> returns to CategoryOverviewView.
+        await t.tap(find.text('全部类别'));
+        await t.pump();
+        await t.pump(const Duration(milliseconds: 250));
+        expect(categoryController.mode, PopularBrowseMode.categoryOverview);
+        expect(find.byType(CategoryOverviewView), findsOneWidget);
+        expect(find.text('全部类别'), findsNothing);
+
         // Navigate to Settings tab, then tap '首页' in top bar -> returns directly
-        // to PopularDashboard and clears category tag.
+        // to PopularDashboard.
         await t.tap(find.byTooltip('设置'));
         await t.pump();
         await t.pump(const Duration(milliseconds: 250));
@@ -161,15 +204,15 @@ void main() {
 
         await t.tap(find.text('首页'));
         await t.pump();
-        await t.pump(const Duration(milliseconds: 300));
-        expect(popularController.currentTag, isEmpty);
+        await t.pump(const Duration(milliseconds: 250));
+        expect(categoryController.mode, PopularBrowseMode.home);
         expect(find.byType(PopularDashboard), findsOneWidget);
         expect(
           find.byKey(const ValueKey('top-nav-indicator-首页-true')),
           findsOneWidget,
         );
 
-        // From a non-home tab, selecting a category jumps directly to tag grid.
+        // From a non-home tab, tapping '分类' jumps directly to CategoryOverviewView.
         await t.tap(find.byTooltip('设置'));
         await t.pump();
         await t.pump(const Duration(milliseconds: 250));
@@ -177,18 +220,14 @@ void main() {
 
         await t.tap(find.text('分类'));
         await t.pump();
-        await t.pump(const Duration(milliseconds: 300));
-        await t.tap(find.text('奇幻').last);
-        await t.pump();
-        await t.pump(const Duration(milliseconds: 300));
-        expect(popularController.currentTag, '奇幻');
-        expect(find.text('分类 · 奇幻'), findsOneWidget);
-        expect(find.byType(SliverGrid), findsOneWidget);
+        await t.pump(const Duration(milliseconds: 250));
+        expect(categoryController.mode, PopularBrowseMode.categoryOverview);
+        expect(find.byType(CategoryOverviewView), findsOneWidget);
 
         await t.tap(find.text('首页'));
         await t.pump();
-        await t.pump(const Duration(milliseconds: 300));
-        expect(popularController.currentTag, isEmpty);
+        await t.pump(const Duration(milliseconds: 250));
+        expect(categoryController.mode, PopularBrowseMode.home);
         expect(find.byType(PopularDashboard), findsOneWidget);
 
         // Open top search bar -> secondary filter -> apply query + hideWatched.
@@ -258,6 +297,8 @@ void main() {
       'portrait light shell uses CinemaBottomBar, top-left history button, and light theme palette',
       (t) async {
         final popularController = _FakePopularController();
+        final categoryController = _createFakeCategoryController();
+        addTearDown(categoryController.dispose);
         final historyRepo = _FakeSearchHistoryRepository(const []);
         var historyOpened = false;
 
@@ -266,6 +307,7 @@ void main() {
           size: const Size(390, 844),
           brightness: Brightness.light,
           popularController: popularController,
+          categoryController: categoryController,
           historyRepository: historyRepo,
           onHistoryRoute: () => historyOpened = true,
         );
@@ -295,6 +337,47 @@ void main() {
         expect(t.takeException(), isNull);
       },
     );
+
+    testWidgets(
+      'starting on non-home tab, opening category, then pressing back loads home trends',
+      (t) async {
+        final popularController = _FakePopularController();
+        final categoryController = _createFakeCategoryController();
+        addTearDown(categoryController.dispose);
+        final historyRepo = _FakeSearchHistoryRepository(const []);
+
+        await _pumpCinemaShell(
+          t,
+          size: const Size(1280, 800),
+          brightness: Brightness.dark,
+          popularController: popularController,
+          categoryController: categoryController,
+          historyRepository: historyRepo,
+          initialRoute: '/tab/timeline/',
+        );
+
+        expect(find.text('stub-timeline'), findsOneWidget);
+        expect(popularController.trendList, isEmpty);
+
+        // Tap top-bar '分类' from non-home startup tab -> mounts PopularPage directly
+        // in categoryOverview mode without fetching home trends yet.
+        await t.tap(find.text('分类'));
+        await t.pump();
+        await t.pump(const Duration(milliseconds: 250));
+        expect(categoryController.mode, PopularBrowseMode.categoryOverview);
+        expect(find.byType(CategoryOverviewView), findsOneWidget);
+        expect(popularController.trendList, isEmpty);
+
+        // System back steps back to Home -> must automatically fetch trends.
+        expect(categoryController.handleBack(), isTrue);
+        await t.pump();
+        await t.pump(const Duration(milliseconds: 250));
+        expect(categoryController.mode, PopularBrowseMode.home);
+        expect(find.byType(PopularDashboard), findsOneWidget);
+        expect(popularController.trendList, isNotEmpty);
+        expect(t.takeException(), isNull);
+      },
+    );
   });
 }
 
@@ -303,7 +386,9 @@ Future<void> _pumpCinemaShell(
   required Size size,
   required Brightness brightness,
   required PopularController popularController,
+  required CategoryController categoryController,
   required ISearchHistoryRepository historyRepository,
+  String initialRoute = '/tab/popular/',
   ValueChanged<Uri>? onSearchRoute,
   VoidCallback? onHistoryRoute,
 }) async {
@@ -315,12 +400,14 @@ Future<void> _pumpCinemaShell(
     register: (c) {
       c
         ..addSingleton<PopularController>(() => popularController)
+        ..addSingleton<CategoryController>(() => categoryController)
         ..addSingleton<ISearchHistoryRepository>(() => historyRepository)
         ..route(
           '/tab',
           child: (_, state) => ScaffoldMenu(
             location: state.uri.path,
             popularController: popularController,
+            categoryController: categoryController,
             historyRepository: historyRepository,
           ),
           children: (sub) {
@@ -328,7 +415,10 @@ Future<void> _pumpCinemaShell(
               ..route(
                 '/popular/',
                 transition: TransitionType.none,
-                child: (_, _) => PopularPage(controller: popularController),
+                child: (_, _) => PopularPage(
+                  controller: popularController,
+                  categoryController: categoryController,
+                ),
               )
               ..route(
                 '/timeline/',
@@ -390,7 +480,7 @@ Future<void> _pumpCinemaShell(
     ModularApp(
       key: UniqueKey(),
       module: module,
-      initialRoute: '/tab/popular/',
+      initialRoute: initialRoute,
       child: Builder(
         builder: (ctx) => MaterialApp.router(
           theme: ThemeData(
@@ -414,6 +504,20 @@ class _TestPaths extends PathProviderPlatform {
   @override
   Future<String?> getApplicationSupportPath() async => path;
 }
+
+CategoryController _createFakeCategoryController() => CategoryController(
+  mirrorEnabledProvider: () => true,
+  pageFetcher: ({
+    required tag,
+    required limit,
+    required offset,
+    required useMirror,
+  }) async => CategoryPageResult(
+    items: List.generate(limit, (i) => _item(5000 + offset + i + 1)),
+    rawCount: limit,
+    failed: false,
+  ),
+);
 
 class _FakePopularController extends PopularController {
   @override

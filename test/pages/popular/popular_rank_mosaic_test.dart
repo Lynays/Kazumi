@@ -62,10 +62,17 @@ void main() {
       await gesture.moveTo(t.getCenter(find.byType(InkWell).first));
       await t.pumpAndSettle();
       expect(find.byType(Tooltip), findsNothing);
-      expect(
-        t.widgetList<AnimatedScale>(find.byType(AnimatedScale)).last.scale,
-        1.20,
-      );
+      final hoveredTransform = t
+          .widgetList<Transform>(
+            find.descendant(
+              of: find.byType(PopularRankMosaic),
+              matching: find.byType(Transform),
+            ),
+          )
+          .firstWhere(
+            (w) => (w.transform.storage[0] - 1.20).abs() < 1e-4,
+          );
+      expect(hoveredTransform.transform.storage[0], closeTo(1.20, 1e-4));
       await gesture.moveTo(const Offset(1, 1));
       await t.pumpAndSettle();
 
