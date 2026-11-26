@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_modular/flutter_modular.dart';
 import 'package:kazumi/bean/card/network_img_layer.dart';
-import 'package:kazumi/bean/dialog/dialog_helper.dart';
 import 'package:kazumi/modules/bangumi/bangumi_item.dart';
 
 // 视频卡片 - 垂直布局
@@ -9,15 +8,11 @@ class BangumiCardV extends StatelessWidget {
   const BangumiCardV({
     super.key,
     required this.bangumiItem,
-    this.canTap = true,
-    this.enableHero = true,
     this.coverWidth,
     this.coverHeight,
   });
 
   final BangumiItem bangumiItem;
-  final bool canTap;
-  final bool enableHero;
   final double? coverWidth;
   final double? coverHeight;
 
@@ -30,19 +25,17 @@ class BangumiCardV extends StatelessWidget {
   }
 
   Widget _buildCoverImage(double width, double height) {
-    final image = NetworkImgLayer(
-      src: _coverUrl,
-      width: width,
-      height: height,
-      fadeOutDuration: Duration.zero,
-      fadeInDuration: const Duration(milliseconds: 80),
-    );
-    if (!enableHero) return image;
     return Hero(
       transitionOnUserGestures: true,
       flightShuttleBuilder: NetworkImgLayer.heroFlightShuttleBuilder,
       tag: bangumiItem.id,
-      child: image,
+      child: NetworkImgLayer(
+        src: _coverUrl,
+        width: width,
+        height: height,
+        fadeOutDuration: Duration.zero,
+        fadeInDuration: const Duration(milliseconds: 80),
+      ),
     );
   }
 
@@ -61,15 +54,7 @@ class BangumiCardV extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       margin: EdgeInsets.zero,
       child: InkWell(
-        onTap: () {
-          if (!canTap) {
-            KazumiDialog.showToast(
-              message: '编辑模式',
-            );
-            return;
-          }
-          context.pushNamed('/info/', arguments: bangumiItem);
-        },
+        onTap: () => context.pushNamed('/info/', arguments: bangumiItem),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -78,9 +63,9 @@ class BangumiCardV extends StatelessWidget {
               child: hasKnownCoverSize
                   ? _buildCoverImage(coverWidth!, coverHeight!)
                   : LayoutBuilder(
-                      builder: (context, boxConstraints) => _buildCoverImage(
-                        boxConstraints.maxWidth,
-                        boxConstraints.maxHeight,
+                      builder: (context, constraints) => _buildCoverImage(
+                        constraints.maxWidth,
+                        constraints.maxHeight,
                       ),
                     ),
             ),
