@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_modular/flutter_modular.dart';
 import 'package:kazumi/bean/card/palette_card.dart';
-import 'package:kazumi/utils/constants.dart';
+import 'package:kazumi/pages/menu/cinema_tokens.dart';
 import 'package:kazumi/services/storage/storage.dart';
 import 'package:kazumi/bean/dialog/dialog_helper.dart';
 import 'package:kazumi/bean/settings/theme_provider.dart';
@@ -62,53 +62,32 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
     unawaited(next.saveToStorage());
   }
 
-  void setTheme(Color? color) {
-    var defaultDarkTheme = ThemeData(
-        useMaterial3: true,
-        fontFamily: themeProvider.currentFontFamily,
-        brightness: Brightness.dark,
-        colorSchemeSeed: color,
-        progressIndicatorTheme: progressIndicatorTheme2024,
-        sliderTheme: sliderTheme2024,
-        pageTransitionsTheme: pageTransitionsTheme2024);
-    var oledTheme = oledDarkTheme(defaultDarkTheme);
+  void _applyCurrentTheme() {
+    final customColor = resolveCustomThemeColor(defaultThemeColor?.toString());
     themeProvider.setTheme(
-      ThemeData(
-          useMaterial3: true,
-          fontFamily: themeProvider.currentFontFamily,
-          brightness: Brightness.light,
-          colorSchemeSeed: color,
-          progressIndicatorTheme: progressIndicatorTheme2024,
-          sliderTheme: sliderTheme2024,
-          pageTransitionsTheme: pageTransitionsTheme2024),
-      oledEnhance ? oledTheme : defaultDarkTheme,
+      buildAppTheme(
+        brightness: Brightness.light,
+        customColor: customColor,
+        fontFamily: themeProvider.currentFontFamily,
+      ),
+      buildAppTheme(
+        brightness: Brightness.dark,
+        customColor: customColor,
+        fontFamily: themeProvider.currentFontFamily,
+        oledEnhance: oledEnhance,
+      ),
     );
+  }
+
+  void setTheme(Color? color) {
     defaultThemeColor = color?.toARGB32().toRadixString(16) ?? 'default';
+    _applyCurrentTheme();
     GStorage.putSetting(SettingsKeys.themeColor, defaultThemeColor);
   }
 
   void resetTheme() {
-    var defaultDarkTheme = ThemeData(
-        useMaterial3: true,
-        fontFamily: themeProvider.currentFontFamily,
-        brightness: Brightness.dark,
-        colorSchemeSeed: Colors.green,
-        progressIndicatorTheme: progressIndicatorTheme2024,
-        sliderTheme: sliderTheme2024,
-        pageTransitionsTheme: pageTransitionsTheme2024);
-    var oledTheme = oledDarkTheme(defaultDarkTheme);
-    themeProvider.setTheme(
-      ThemeData(
-          useMaterial3: true,
-          fontFamily: themeProvider.currentFontFamily,
-          brightness: Brightness.light,
-          colorSchemeSeed: Colors.green,
-          progressIndicatorTheme: progressIndicatorTheme2024,
-          sliderTheme: sliderTheme2024,
-          pageTransitionsTheme: pageTransitionsTheme2024),
-      oledEnhance ? oledTheme : defaultDarkTheme,
-    );
     defaultThemeColor = 'default';
+    _applyCurrentTheme();
     GStorage.putSetting(SettingsKeys.themeColor, 'default');
   }
 
@@ -135,14 +114,8 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
   }
 
   void updateOledEnhance() {
-    dynamic color;
     oledEnhance = GStorage.getSetting(SettingsKeys.oledEnhance);
-    if (defaultThemeColor == 'default') {
-      color = Colors.green;
-    } else {
-      color = Color(int.parse(defaultThemeColor, radix: 16));
-    }
-    setTheme(color);
+    _applyCurrentTheme();
   }
 
   @override
@@ -173,6 +146,9 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                           (BuildContext context, StateSetter setState) {
                         final List<Map<String, dynamic>> colorThemes =
                             colorThemeTypes;
+                        final isDark =
+                            Theme.of(context).brightness == Brightness.dark;
+                        final storedColor = defaultThemeColor?.toString();
                         return Wrap(
                           alignment: WrapAlignment.center,
                           spacing: 8,
@@ -181,23 +157,26 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                             ...colorThemes.map(
                               (e) {
                                 final index = colorThemes.indexOf(e);
+                                final Color themeColor = e['color'] as Color;
+                                final Color swatchColor = index == 0 && isDark
+                                    ? CinemaTokens.darkAccent
+                                    : themeColor;
+                                final bool isSelected = index == 0
+                                    ? isDefaultThemeColor(storedColor)
+                                    : themeColor.toARGB32().toRadixString(16) ==
+                                          storedColor;
                                 return GestureDetector(
                                   onTap: () {
                                     index == 0
                                         ? resetTheme()
-                                        : setTheme(e['color']);
+                                        : setTheme(themeColor);
                                     KazumiDialog.dismiss();
                                   },
                                   child: Column(
                                     children: [
                                       PaletteCard(
-                                        color: e['color'],
-                                        selected: (e['color']
-                                                    .value
-                                                    .toRadixString(16) ==
-                                                defaultThemeColor ||
-                                            (defaultThemeColor == 'default' &&
-                                                index == 0)),
+                                        color: swatchColor,
+                                        selected: isSelected,
                                       ),
                                       Text(e['label']),
                                     ],
@@ -233,13 +212,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                   await GStorage.putSetting(
                       SettingsKeys.useSystemFont, useSystemFont);
                   themeProvider.setFontFamily(useSystemFont);
-                  dynamic color;
-                  if (defaultThemeColor == 'default') {
-                    color = Colors.green;
-                  } else {
-                    color = Color(int.parse(defaultThemeColor, radix: 16));
-                  }
-                  setTheme(color);
+                  _applyCurrentTheme();
                   setState(() {});
                 },
                 title: Text('使用系统字体'),

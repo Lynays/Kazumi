@@ -16,7 +16,16 @@ class MediaErrorWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final errorWidget = GeneralErrorWidget(
+      title: title,
+      errMsg: errMsg,
+      icon: icon,
+      compact: true,
+    );
     // Media surfaces stay black regardless of the app theme.
+    if (theme.brightness == Brightness.dark) {
+      return errorWidget;
+    }
     return Theme(
       data: theme.copyWith(
         colorScheme: ColorScheme.fromSeed(
@@ -24,12 +33,7 @@ class MediaErrorWidget extends StatelessWidget {
           brightness: Brightness.dark,
         ),
       ),
-      child: GeneralErrorWidget(
-        title: title,
-        errMsg: errMsg,
-        icon: icon,
-        compact: true,
-      ),
+      child: errorWidget,
     );
   }
 }
